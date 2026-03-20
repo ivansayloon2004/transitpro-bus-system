@@ -120,6 +120,14 @@
                     <input name="additionalDates" placeholder="Example: 2026-03-25, 2026-03-27" />
                   </label>
                   <label>
+                    Monthly Batch
+                    <select name="dateBatchMode">
+                      <option value="single">Only selected date</option>
+                      <option value="restOfMonth">Create every day until month end</option>
+                      <option value="fullMonth">Create every day of the selected month</option>
+                    </select>
+                  </label>
+                  <label>
                     Departure
                     <input type="time" name="departureTime" required />
                   </label>

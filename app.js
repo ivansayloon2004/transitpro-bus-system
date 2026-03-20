@@ -439,8 +439,23 @@ function normalizeStops(value) {
     .filter(Boolean);
 }
 
-function parseScheduleDates(primaryDate, additionalDatesValue, isEditing = false) {
+function buildMonthDates(primaryDate, mode) {
+  const [year, month, day] = String(primaryDate || "").split("-").map(Number);
+  if (!year || !month || !day) return [];
+  const lastDay = new Date(year, month, 0).getDate();
+  const startDay = mode === "fullMonth" ? 1 : day;
+  const dates = [];
+  for (let currentDay = startDay; currentDay <= lastDay; currentDay += 1) {
+    dates.push(`${year}-${String(month).padStart(2, "0")}-${String(currentDay).padStart(2, "0")}`);
+  }
+  return dates;
+}
+
+function parseScheduleDates(primaryDate, additionalDatesValue, batchMode = "single", isEditing = false) {
   const dates = [String(primaryDate || "").trim()];
+  if (!isEditing && batchMode && batchMode !== "single") {
+    dates.push(...buildMonthDates(primaryDate, batchMode));
+  }
   if (!isEditing && String(additionalDatesValue || "").trim()) {
     dates.push(
       ...String(additionalDatesValue)
@@ -1489,6 +1504,7 @@ function renderScheduleConflictHelper() {
   const busId = form.querySelector('[name="busId"]')?.value;
   const date = form.querySelector('[name="date"]')?.value;
   const additionalDates = form.querySelector('[name="additionalDates"]')?.value;
+  const dateBatchMode = form.querySelector('[name="dateBatchMode"]')?.value || "single";
   const scheduleId = form.querySelector('[name="scheduleId"]')?.value;
 
   if (!busId || !date) {
@@ -1502,7 +1518,7 @@ function renderScheduleConflictHelper() {
     .sort((a, b) => a.departureTime.localeCompare(b.departureTime));
 
   if (!matchingSchedules.length) {
-    helper.innerHTML = `<strong>${bus ? bus.plateNumber : "Selected bus"}</strong><br />No other schedules found for ${date}.${additionalDates ? "<br />Additional dates will be created too." : ""}`;
+    helper.innerHTML = `<strong>${bus ? bus.plateNumber : "Selected bus"}</strong><br />No other schedules found for ${date}.${(additionalDates || dateBatchMode !== "single") ? "<br />Additional selected dates will be created too." : ""}`;
     return;
   }
 
@@ -2333,13 +2349,14 @@ async function saveSchedule(formData, form) {
   const busId = formData.get("busId");
   const date = formData.get("date");
   const additionalDatesValue = formData.get("additionalDates");
+  const dateBatchMode = formData.get("dateBatchMode") || "single";
   const departureTime = formData.get("departureTime");
   const arrivalTime = formData.get("arrivalTime");
   const fare = Number(formData.get("fare") || 0);
   const route = getRoute(routeId);
   const stopFares = parseStopFares(formData.get("stopFares"));
   const isEditing = Boolean(formData.get("scheduleId"));
-  const scheduleDates = parseScheduleDates(date, additionalDatesValue, isEditing);
+  const scheduleDates = parseScheduleDates(date, additionalDatesValue, dateBatchMode, isEditing);
 
   if (!date || !departureTime || !arrivalTime) {
     throw new Error("Date, departure time, and arrival time are required.");
@@ -2419,6 +2436,8 @@ function editSchedule(scheduleId) {
   form.querySelector('[name="date"]').value = schedule.date;
   const additionalDatesInput = form.querySelector('[name="additionalDates"]');
   if (additionalDatesInput) additionalDatesInput.value = "";
+  const dateBatchModeInput = form.querySelector('[name="dateBatchMode"]');
+  if (dateBatchModeInput) dateBatchModeInput.value = "single";
   form.querySelector('[name="departureTime"]').value = schedule.departureTime;
   form.querySelector('[name="arrivalTime"]').value = schedule.arrivalTime;
   const fareInput = form.querySelector('[name="fare"]');
