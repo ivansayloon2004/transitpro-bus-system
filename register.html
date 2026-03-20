@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TransitPro Passenger Registration</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body data-page="auth">
+    <div class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Passenger Access</p>
+          <h1>TransitPro Passenger Registration</h1>
+        </div>
+        <div class="topbar-actions">
+          <div class="user-badge" id="sessionBadge">Guest Access</div>
+          <a class="ghost-button admin-link-button" href="login.html">Passenger Login</a>
+          <a class="ghost-button admin-link-button" href="admin-login.html">Admin Login</a>
+          <button class="ghost-button" id="logoutBtn" type="button">Logout</button>
+        </div>
+      </header>
+
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Passenger Registration</p>
+          <h2>Create a passenger account in a dedicated page.</h2>
+          <p>Registration happens here so the main system windows stay clean and focused.</p>
+          <div class="hero-stats" id="heroStats"></div>
+        </div>
+        <div class="hero-ticket" id="ticketPreviewCard"></div>
+      </section>
+
+      <main class="auth-window-grid">
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Create Account</p>
+              <h3>Registration Form</h3>
+            </div>
+          </div>
+          <form id="registerForm" class="stacked-form">
+            <h4>Quick Register</h4>
+            <label>
+              Full Name
+              <input name="name" placeholder="Passenger name" required />
+            </label>
+            <label>
+              Contact Number
+              <input name="contact" placeholder="0917 555 0199" required />
+            </label>
+            <label>
+              Password
+              <input name="password" type="password" placeholder="Create password" required />
+            </label>
+            <button type="submit">Create Passenger Account</button>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Next Step</p>
+              <h3>Already Have One?</h3>
+            </div>
+          </div>
+          <div class="stacked-form">
+            <h4>Sign in after registration</h4>
+            <p class="muted">Once your account is created, go back to the passenger login page or open the passenger system.</p>
+            <div class="action-row">
+              <a class="nav-link nav-link-anchor active" href="login.html">Passenger Login</a>
+              <a class="secondary-button nav-link-anchor" href="app">Open Passenger System</a>
+            </div>
+            <div class="sync-callout">
+              <strong>Need phone access too?</strong>
+              <p class="muted">After creating accounts or bookings on this computer, sync them here so another device can log in to the same shared data.</p>
+              <button type="button" class="secondary-button" id="syncServerBtn">Sync This Device To Server</button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

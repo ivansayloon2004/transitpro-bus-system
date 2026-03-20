@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TransitPro Bus Ticketing System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Integrated Bus Ticketing and Scheduling</p>
+          <h1>TransitPro Terminal Suite</h1>
+        </div>
+        <div class="topbar-actions">
+          <div class="user-badge" id="sessionBadge">Guest Access</div>
+          <button class="ghost-button" id="logoutBtn" type="button">Logout</button>
+        </div>
+      </header>
+
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Passenger and Admin Workspace</p>
+          <h2>Book, manage, and monitor realistic bus operations in one place.</h2>
+          <p>
+            Search routes, reserve seats, print tickets, and manage schedules with a modern
+            interface inspired by real transport terminal systems.
+          </p>
+          <div class="hero-stats" id="heroStats"></div>
+        </div>
+        <div class="hero-ticket" id="ticketPreviewCard"></div>
+      </section>
+
+      <nav class="main-nav">
+        <button class="nav-link active" data-view="routesView" type="button">Routes</button>
+        <button class="nav-link" data-view="bookingView" type="button">Book Ticket</button>
+        <button class="nav-link" data-view="historyView" type="button">Booking History</button>
+        <a class="nav-link admin-only nav-link-anchor" href="admin.html" target="_blank" rel="noopener">Admin Window</a>
+      </nav>
+
+      <main class="workspace-shell">
+        <section class="workspace">
+          <section class="view active passenger-view" id="routesView">
+            <div class="panel kiosk-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Route Viewing</p>
+                  <h3>Available Bus Routes</h3>
+                </div>
+              </div>
+
+              <div class="toolbar">
+                <input id="routeSearch" placeholder="Search origin, destination, bus type..." />
+                <select id="routeFilterType">
+                  <option value="all">All Bus Types</option>
+                </select>
+              </div>
+
+              <div class="route-table" id="routeTable"></div>
+            </div>
+          </section>
+
+          <section class="view passenger-view" id="bookingView">
+            <div class="booking-grid">
+              <div class="panel kiosk-panel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Ticket Booking System</p>
+                    <h3>Passenger Booking Form</h3>
+                  </div>
+                </div>
+
+                <form id="bookingForm" class="booking-form">
+                  <label>
+                    Passenger Name
+                    <input name="passengerName" required />
+                  </label>
+                  <label>
+                    Contact Number
+                    <input name="contactNumber" required />
+                  </label>
+                  <label>
+                    Date of Travel
+                    <input name="travelDate" type="date" required />
+                  </label>
+                  <label>
+                    Origin
+                    <select name="origin" id="originSelect" required></select>
+                  </label>
+                  <label>
+                    Destination
+                    <select name="destination" id="destinationSelect" required></select>
+                  </label>
+                  <label>
+                    Preferred Bus
+                    <select name="busId" id="bookingBusSelect">
+                      <option value="">Any available bus</option>
+                    </select>
+                  </label>
+                  <label>
+                    Number of Passengers
+                    <input name="passengerCount" type="number" min="1" max="6" value="1" required />
+                  </label>
+                  <button type="submit">Find Available Schedules</button>
+                </form>
+              </div>
+
+              <div class="panel kiosk-panel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Schedules</p>
+                    <h3>Available Trips</h3>
+                  </div>
+                </div>
+                <div id="scheduleResults" class="schedule-results empty-state">
+                  Choose a route and travel date to see available schedules.
+                </div>
+              </div>
+
+              <div class="panel kiosk-panel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Seat Selection</p>
+                    <h3>Bus Seat Layout</h3>
+                  </div>
+                </div>
+                <div class="seat-legend">
+                  <span><i class="seat available"></i> Available</span>
+                  <span><i class="seat reserved"></i> Reserved</span>
+                  <span><i class="seat occupied"></i> Occupied</span>
+                  <span><i class="seat selected"></i> Selected</span>
+                </div>
+                <div id="seatMap" class="seat-map empty-state">Select a schedule to load seats.</div>
+                <div class="seat-summary" id="seatSummary"></div>
+              </div>
+
+              <div class="panel kiosk-panel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Booking Confirmation</p>
+                    <h3>Ticket Preview</h3>
+                  </div>
+                </div>
+                <div id="bookingSummary" class="booking-summary empty-state">
+                  Ticket details will appear here after seat selection.
+                </div>
+                <div class="payment-panel">
+                  <div class="payment-head">
+                    <p class="eyebrow">Payment</p>
+                    <h4>Mock Payment Details</h4>
+                  </div>
+                  <div class="booking-form">
+                    <label>
+                      Payment Method
+                      <select id="paymentMethodSelect">
+                        <option value="">Choose payment method</option>
+                        <option value="GCash">GCash</option>
+                        <option value="Maya">Maya</option>
+                        <option value="Bank Transfer">Bank Transfer</option>
+                      </select>
+                    </label>
+                    <label>
+                      Payment Reference
+                      <input id="paymentReferenceInput" placeholder="Example: Juan Dela Cruz / 1234" />
+                    </label>
+                    <div class="info-strip" id="paymentHelper">
+                      Select seats and a payment method to simulate payment.
+                    </div>
+                  </div>
+                </div>
+                <div class="action-row">
+                  <button id="confirmBookingBtn" type="button">Pay & Submit Booking</button>
+                  <button id="printTicketBtn" type="button" class="secondary-button">Print E-Ticket</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="view passenger-view" id="historyView">
+            <div class="panel kiosk-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Additional Function</p>
+                  <h3>Booking History</h3>
+                </div>
+              </div>
+              <div id="historyTable" class="history-table empty-state">
+                Log in as a passenger to view booking history.
+              </div>
+            </div>
+          </section>
+
+          <section class="view" id="adminView">
+            <div class="admin-grid">
+              <div class="panel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Admin Dashboard</p>
+                    <h3>Daily Reservations and Sales</h3>
+                  </div>
+                </div>
+                <div id="adminMetrics" class="metric-grid"></div>
+                <div id="reportPanel" class="report-panel"></div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Scheduling System</p>
+                    <h3>Manage Schedules</h3>
+                  </div>
+                </div>
+                <form id="scheduleForm" class="booking-form compact-form">
+                  <input type="hidden" name="scheduleId" />
+                  <div class="form-status" id="scheduleFormStatus">Creating New Schedule</div>
+                  <label>
+                    Route
+                    <select name="routeId" id="adminRouteSelect" required></select>
+                  </label>
+                  <label>
+                    Bus
+                    <select name="busId" id="adminBusSelect" required></select>
+                  </label>
+                  <label>
+                    Travel Date
+                    <input type="date" name="date" required />
+                  </label>
+                  <label>
+                    Departure
+                    <input type="time" name="departureTime" required />
+                  </label>
+                  <label>
+                    Arrival
+                    <input type="time" name="arrivalTime" required />
+                  </label>
+                  <label>
+                    Fare
+                    <input type="number" name="fare" min="0" required />
+                  </label>
+                  <label>
+                    Stop Fares
+                    <input name="stopFares" placeholder="Example: Mandaue:80, Consolacion:140" />
+                  </label>
+                  <button type="submit">Save Schedule</button>
+                  <button type="button" id="resetScheduleFormBtn" class="secondary-button">New Schedule</button>
+                </form>
+                <div id="adminSchedules" class="admin-list"></div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Seat Availability</p>
+                    <h3>Reserve or Release Seats</h3>
+                  </div>
+                </div>
+                <div class="toolbar">
+                  <select id="seatScheduleSelect"></select>
+                </div>
+                <div class="seat-legend">
+                  <span><i class="seat available"></i> Available</span>
+                  <span><i class="seat reserved"></i> Reserved by Admin</span>
+                  <span><i class="seat occupied"></i> Booked</span>
+                </div>
+                <div id="adminSeatMap" class="seat-map empty-state">
+                  Select a schedule to manage seat availability.
+                </div>
+                <div class="seat-summary" id="adminSeatSummary"></div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Fleet and Routes</p>
+                    <h3>Manage Buses and Routes</h3>
+                  </div>
+                </div>
+                <form id="busForm" class="booking-form compact-form">
+                  <input type="hidden" name="busId" />
+                  <label>
+                    Plate Number
+                    <input name="plateNumber" required />
+                  </label>
+                  <label>
+                    Bus Type
+                    <input name="busType" required />
+                  </label>
+                  <label>
+                    Capacity
+                    <input name="capacity" type="number" min="10" max="60" required />
+                  </label>
+                  <button type="submit">Save Bus</button>
+                </form>
+
+                <form id="routeForm" class="booking-form compact-form">
+                  <input type="hidden" name="routeId" />
+                  <label>
+                    Origin
+                    <input name="origin" required />
+                  </label>
+                  <label>
+                    Destination
+                    <input name="destination" required />
+                  </label>
+                  <label>
+                    Via / Stops
+                    <input name="stops" placeholder="Example: Mandaue, Consolacion, Liloan" />
+                  </label>
+                  <label>
+                    Distance (km)
+                    <input name="distanceKm" type="number" min="1" required />
+                  </label>
+                  <label>
+                    Travel Hours
+                    <input name="travelHours" type="number" min="1" required />
+                  </label>
+                  <label>
+                    Travel Minutes
+                    <input name="travelMinutes" type="number" min="0" max="59" value="0" required />
+                  </label>
+                  <button type="submit">Save Route</button>
+                </form>
+                <div id="adminResources" class="admin-list"></div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Reservations</p>
+                    <h3>Bookings and Ticket Sales</h3>
+                  </div>
+                </div>
+                <div id="adminBookings" class="admin-list"></div>
+              </div>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast"></div>
+    <div class="modal-backdrop" id="paymentModalBackdrop">
+      <div class="payment-modal">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow" id="paymentModalEyebrow">Checkout</p>
+            <h3 id="paymentModalTitle">Confirm Mock Payment</h3>
+          </div>
+          <button type="button" class="secondary-button" id="closePaymentModalBtn">Close</button>
+        </div>
+        <div class="payment-modal-body" id="paymentModalBody"></div>
+        <div class="action-row">
+          <button type="button" class="secondary-button" id="cancelPaymentModalBtn">Back</button>
+          <button type="button" id="completePaymentBtn">Complete Payment</button>
+        </div>
+      </div>
+    </div>
+    <section class="print-ticket-sheet" id="printTicketSheet" aria-hidden="true"></section>
+
+    <script src="app.js"></script>
+  </body>
+</html>

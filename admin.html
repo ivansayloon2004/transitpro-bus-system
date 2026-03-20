@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TransitPro Admin Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body data-page="admin">
+    <div class="shell admin-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Integrated Bus Ticketing and Scheduling</p>
+          <h1>TransitPro Admin Dashboard</h1>
+        </div>
+        <div class="topbar-actions">
+          <div class="user-badge" id="sessionBadge">Guest Access</div>
+          <a class="ghost-button admin-link-button" href="index.html">Open Passenger Window</a>
+          <button class="ghost-button" id="logoutBtn" type="button">Logout</button>
+        </div>
+      </header>
+
+      <section class="hero admin-hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Operations Console</p>
+          <h2>Manage schedules, fleet resources, seat holds, and ticket sales.</h2>
+          <p>
+            This window is designed for dispatchers and terminal administrators handling
+            day-to-day bus operations.
+          </p>
+          <div class="hero-stats" id="heroStats"></div>
+        </div>
+        <div class="hero-ticket" id="ticketPreviewCard"></div>
+      </section>
+
+      <nav class="main-nav admin-subnav">
+        <button class="nav-link admin-panel-link active" data-admin-panel="adminOverview" type="button">Overview</button>
+        <button class="nav-link admin-panel-link" data-admin-panel="adminSchedulesPanel" type="button">Schedules</button>
+        <button class="nav-link admin-panel-link" data-admin-panel="adminSeatsPanel" type="button">Seats</button>
+        <button class="nav-link admin-panel-link" data-admin-panel="adminResourcesPanel" type="button">Buses & Routes</button>
+        <button class="nav-link admin-panel-link" data-admin-panel="adminManifestPanel" type="button">Manifest</button>
+        <button class="nav-link admin-panel-link" data-admin-panel="adminLookupPanel" type="button">Lookup</button>
+        <button class="nav-link admin-panel-link" data-admin-panel="adminBookingsPanel" type="button">Bookings</button>
+        <button class="nav-link admin-panel-link" data-admin-panel="adminAuditPanel" type="button">Audit Log</button>
+        <a class="nav-link nav-link-anchor" href="index.html">Back To Index</a>
+      </nav>
+
+      <main class="workspace-shell">
+        <section class="workspace">
+          <section class="view active" id="adminView">
+            <div class="admin-grid">
+              <div class="panel ops-panel ops-overview" id="adminOverview">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Admin Dashboard</p>
+                    <h3>Daily Reservations and Sales</h3>
+                  </div>
+                </div>
+                <div class="toolbar report-filter-bar">
+                  <input id="reportStartDate" type="date" />
+                  <input id="reportEndDate" type="date" />
+                  <select id="reportRouteFilter"></select>
+                  <select id="reportBusFilter"></select>
+                  <select id="reportStatusFilter">
+                    <option value="all">All Statuses</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Confirmed">Confirmed</option>
+                    <option value="Cancelled">Cancelled</option>
+                  </select>
+                  <select id="reportPaymentFilter">
+                    <option value="all">All Payments</option>
+                    <option value="GCash">GCash</option>
+                    <option value="Maya">Maya</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                  </select>
+                </div>
+                <div id="adminMetrics" class="metric-grid"></div>
+                <div id="reportPanel" class="report-panel"></div>
+                <div class="report-actions">
+                  <button type="button" id="exportCsvBtn">Export CSV Report</button>
+                  <button type="button" id="exportPdfBtn" class="secondary-button">Export PDF Report</button>
+                  <button type="button" id="exportBackupBtn" class="secondary-button">Download Backup</button>
+                  <button type="button" id="importBackupBtn" class="secondary-button">Restore Backup</button>
+                  <button type="button" id="syncServerNowBtn" class="secondary-button">Sync Local To Server</button>
+                  <a class="nav-link nav-link-anchor" href="verify" target="_blank" rel="noopener">Open Ticket Verification</a>
+                </div>
+                <input type="file" id="backupImportInput" accept="application/json,.json" hidden />
+              </div>
+
+              <div class="panel ops-panel" id="adminSchedulesPanel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Scheduling System</p>
+                    <h3>Manage Schedules</h3>
+                  </div>
+                </div>
+                <form id="scheduleForm" class="booking-form compact-form">
+                  <input type="hidden" name="scheduleId" />
+                  <div class="form-status" id="scheduleFormStatus">Creating New Schedule</div>
+                  <label>
+                    Route
+                    <select name="routeId" id="adminRouteSelect" required></select>
+                  </label>
+                  <label>
+                    Bus
+                    <select name="busId" id="adminBusSelect" required></select>
+                  </label>
+                  <label>
+                    Travel Date
+                    <input type="date" name="date" required />
+                  </label>
+                  <label>
+                    Departure
+                    <input type="time" name="departureTime" required />
+                  </label>
+                  <label>
+                    Arrival
+                    <input type="time" name="arrivalTime" required />
+                  </label>
+                  <label>
+                    Fare
+                    <input type="number" name="fare" min="0" required />
+                  </label>
+                  <label>
+                    Stop Fares
+                    <input name="stopFares" placeholder="Example: Mandaue:80, Consolacion:140" />
+                  </label>
+                  <button type="submit">Save Schedule</button>
+                  <button type="button" id="resetScheduleFormBtn" class="secondary-button">New Schedule</button>
+                </form>
+                <div class="info-strip" id="scheduleConflictHelper">
+                  Select a bus and date to preview that bus's schedules.
+                </div>
+                <div id="adminSchedules" class="admin-list"></div>
+              </div>
+
+              <div class="panel ops-panel" id="adminSeatsPanel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Seat Availability</p>
+                    <h3>Reserve or Release Seats</h3>
+                  </div>
+                </div>
+                <div class="toolbar">
+                  <select id="seatScheduleSelect"></select>
+                </div>
+                <div class="seat-legend">
+                  <span><i class="seat available"></i> Available</span>
+                  <span><i class="seat reserved"></i> Reserved by Admin</span>
+                  <span><i class="seat occupied"></i> Booked</span>
+                </div>
+                <div id="adminSeatMap" class="seat-map empty-state">
+                  Select a schedule to manage seat availability.
+                </div>
+                <div class="seat-summary" id="adminSeatSummary"></div>
+              </div>
+
+              <div class="panel ops-panel" id="adminResourcesPanel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Fleet and Routes</p>
+                    <h3>Manage Buses and Routes</h3>
+                  </div>
+                </div>
+                <form id="busForm" class="booking-form compact-form">
+                  <input type="hidden" name="busId" />
+                  <label>
+                    Plate Number
+                    <input name="plateNumber" required />
+                  </label>
+                  <label>
+                    Bus Type
+                    <input name="busType" required />
+                  </label>
+                  <label>
+                    Capacity
+                    <input name="capacity" type="number" min="10" max="60" required />
+                  </label>
+                  <button type="submit">Save Bus</button>
+                </form>
+
+                <form id="routeForm" class="booking-form compact-form">
+                  <input type="hidden" name="routeId" />
+                  <label>
+                    Origin
+                    <input name="origin" required />
+                  </label>
+                  <label>
+                    Destination
+                    <input name="destination" required />
+                  </label>
+                  <label>
+                    Via / Stops
+                    <input name="stops" placeholder="Example: Mandaue, Consolacion, Liloan" />
+                  </label>
+                  <label>
+                    Distance (km)
+                    <input name="distanceKm" type="number" min="1" required />
+                  </label>
+                  <label>
+                    Travel Hours
+                    <input name="travelHours" type="number" min="1" required />
+                  </label>
+                  <label>
+                    Travel Minutes
+                    <input name="travelMinutes" type="number" min="0" max="59" value="0" required />
+                  </label>
+                  <button type="submit">Save Route</button>
+                </form>
+                <div id="adminResources" class="admin-list"></div>
+              </div>
+
+              <div class="panel ops-panel" id="adminManifestPanel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Boarding Manifest</p>
+                    <h3>Passenger Manifest Per Schedule</h3>
+                  </div>
+                </div>
+                <div class="toolbar">
+                  <select id="manifestScheduleSelect"></select>
+                  <button type="button" id="printManifestBtn" class="secondary-button">Print Manifest</button>
+                </div>
+                <div id="manifestSummary" class="info-strip">
+                  Select a schedule to view the boarding manifest.
+                </div>
+                <div id="manifestTable" class="admin-list"></div>
+              </div>
+
+              <div class="panel ops-panel" id="adminLookupPanel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Ticket Lookup</p>
+                    <h3>Find Ticket By Code or Contact</h3>
+                  </div>
+                </div>
+                <div class="toolbar">
+                  <input id="ticketLookupInput" placeholder="Search ticket code, passenger, or contact number" />
+                  <button type="button" id="ticketLookupBtn">Search Ticket</button>
+                </div>
+                <div id="ticketLookupResults" class="admin-list empty-state">
+                  Search by ticket code, passenger name, or contact number.
+                </div>
+              </div>
+
+              <div class="panel ops-panel" id="adminBookingsPanel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Reservations</p>
+                    <h3>Bookings and Ticket Sales</h3>
+                  </div>
+                </div>
+                <div id="adminBookings" class="admin-list"></div>
+              </div>
+
+              <div class="panel ops-panel" id="adminAuditPanel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Audit Trail</p>
+                    <h3>Recent Admin Activity</h3>
+                  </div>
+                </div>
+                <div id="adminAuditLog" class="admin-list empty-state">
+                  Admin actions will appear here after updates are made.
+                </div>
+              </div>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

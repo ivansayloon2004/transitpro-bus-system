@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TransitPro Ticket Verification</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body data-page="verify">
+    <div class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Verification Console</p>
+          <h1>TransitPro Ticket Verification</h1>
+        </div>
+        <div class="topbar-actions">
+          <a class="ghost-button admin-link-button" href="admin" target="_blank" rel="noopener">Admin Dashboard</a>
+          <a class="ghost-button admin-link-button" href="app" target="_blank" rel="noopener">Passenger System</a>
+        </div>
+      </header>
+
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Ticket Checker</p>
+          <h2>Verify a ticket code before boarding.</h2>
+          <p>Enter the ticket code to confirm passenger details, trip assignment, payment state, and boarding status.</p>
+        </div>
+        <div class="hero-ticket" id="verifyHeroCard">
+          <div class="ticket-card">
+            <p class="eyebrow">Verifier</p>
+            <h3>Ticket Status Lookup</h3>
+          </div>
+        </div>
+      </section>
+
+      <main class="workspace-shell">
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Verification</p>
+              <h3>Enter Ticket Code</h3>
+            </div>
+          </div>
+          <div class="toolbar">
+            <input id="verifyTicketCodeInput" placeholder="Example: TP-123456" />
+            <button type="button" id="verifyTicketBtn">Verify Ticket</button>
+          </div>
+          <div id="verifyTicketResult" class="empty-state">
+            Enter a ticket code to check whether it is valid.
+          </div>
+        </section>
+      </main>
+
+      <div class="toast" id="toast"></div>
+      <script src="app.js"></script>
+    </div>
+  </body>
+</html>
