@@ -332,6 +332,27 @@ async function importJsonBackup(file) {
   showToast("Backup restored and synced to the server.");
 }
 
+async function postJson(url, payload) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  let data = {};
+  try {
+    data = await response.json();
+  } catch {
+    data = {};
+  }
+
+  if (!response.ok) {
+    throw new Error(data.error || "Request failed.");
+  }
+
+  return data;
+}
+
 function showToast(message) {
   const toast = $("toast");
   if (!toast) return;
@@ -416,6 +437,26 @@ function normalizeStops(value) {
     .split(",")
     .map((stop) => stop.trim())
     .filter(Boolean);
+}
+
+function parseScheduleDates(primaryDate, additionalDatesValue, isEditing = false) {
+  const dates = [String(primaryDate || "").trim()];
+  if (!isEditing && String(additionalDatesValue || "").trim()) {
+    dates.push(
+      ...String(additionalDatesValue)
+        .split(/[\n,]/)
+        .map((dateValue) => dateValue.trim())
+        .filter(Boolean)
+    );
+  }
+
+  const uniqueDates = [...new Set(dates)];
+  uniqueDates.forEach((dateValue) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+      throw new Error(`Invalid travel date "${dateValue}". Use YYYY-MM-DD.`);
+    }
+  });
+  return uniqueDates;
 }
 
 function getRouteStops(route) {
@@ -1447,6 +1488,7 @@ function renderScheduleConflictHelper() {
 
   const busId = form.querySelector('[name="busId"]')?.value;
   const date = form.querySelector('[name="date"]')?.value;
+  const additionalDates = form.querySelector('[name="additionalDates"]')?.value;
   const scheduleId = form.querySelector('[name="scheduleId"]')?.value;
 
   if (!busId || !date) {
@@ -1460,7 +1502,7 @@ function renderScheduleConflictHelper() {
     .sort((a, b) => a.departureTime.localeCompare(b.departureTime));
 
   if (!matchingSchedules.length) {
-    helper.innerHTML = `<strong>${bus ? bus.plateNumber : "Selected bus"}</strong><br />No other schedules found for ${date}.`;
+    helper.innerHTML = `<strong>${bus ? bus.plateNumber : "Selected bus"}</strong><br />No other schedules found for ${date}.${additionalDates ? "<br />Additional dates will be created too." : ""}`;
     return;
   }
 
@@ -2204,10 +2246,9 @@ function printLatestTicket(bookingId = null, options = {}) {
 async function loginUser(formData) {
   const contact = String(formData.get("contact") || "").replace(/\s+/g, "");
   const password = formData.get("password");
-  const user = state.db.passengers.find((passenger) => passenger.contact === contact && passenger.password === password);
-  if (!user) {
-    throw new Error("Passenger account not found.");
-  }
+  const payload = await postJson("/api/auth/login", { contact, password });
+  await pullSnapshotFromServer(true);
+  const user = payload.user;
   state.session = { id: user.id, name: user.name, role: "user" };
   saveSession();
   refreshUi();
@@ -2223,28 +2264,14 @@ async function loginUser(formData) {
 }
 
 async function registerUser(formData, form) {
-  const db = await openDatabase();
-  const transaction = db.transaction("passengers", "readwrite");
-  const store = transaction.objectStore("passengers");
-  const passengers = await requestToPromise(store.getAll());
   const normalizedContact = String(formData.get("contact") || "").replace(/\s+/g, "");
-
-  if (passengers.some((passenger) => passenger.contact === normalizedContact)) {
-    transaction.abort();
-    throw new Error("That contact number is already registered.");
-  }
-
-  store.add({
-    id: uid(),
+  await postJson("/api/auth/register", {
     name: formData.get("name").trim(),
     contact: normalizedContact,
     password: formData.get("password"),
-    role: "user",
-    createdAt: new Date().toISOString(),
   });
-
-  await transactionDone(transaction);
-  await finalizeMutation("register-user");
+  await pullSnapshotFromServer(true);
+  refreshUi();
   form.reset();
   showToast("Passenger account created. You can now log in.");
 }
@@ -2252,51 +2279,22 @@ async function registerUser(formData, form) {
 async function loginAdmin(formData) {
   const username = String(formData.get("username") || "").trim();
   const password = formData.get("password");
-  if (state.db.admins.length === 0) {
-    const db = await openDatabase();
-    const transaction = db.transaction("admins", "readwrite");
-    const admin = {
-      id: uid(),
-      username,
-      password,
-      fullName: username,
-      createdAt: new Date().toISOString(),
-    };
-    transaction.objectStore("admins").add(admin);
-    await transactionDone(transaction);
-    await finalizeMutation("create-first-admin");
-    state.session = { id: admin.id, name: admin.fullName, role: "admin" };
-    saveSession();
-    refreshUi();
-    if (pageMode === "admin") {
-      showToast("First admin account created.");
-    } else if (pageMode === "auth") {
-      const adminWindow = window.open("admin.html", "_blank", "noopener");
-      showToast(adminWindow ? "First admin account created. Admin window opened." : "First admin created. Open admin.html manually.");
-    } else {
-      const adminWindow = window.open("admin.html", "_blank", "noopener");
-      showToast(adminWindow ? "First admin account created in a new window." : "First admin created. Open admin.html manually.");
-    }
-    return;
-  }
-
-  const admin = state.db.admins.find((item) => item.username === username && item.password === password);
-  if (!admin) {
-    throw new Error("Admin credentials are invalid.");
-  }
+  const payload = await postJson("/api/auth/admin-login", { username, password });
+  await pullSnapshotFromServer(true);
+  const admin = payload.admin;
   state.session = { id: admin.id, name: admin.fullName, role: "admin" };
   saveSession();
   refreshUi();
   if (pageMode === "admin") {
-    showToast("Admin dashboard unlocked.");
+    showToast(payload.created ? "First admin account created." : "Admin dashboard unlocked.");
     return;
   }
 
   const adminWindow = window.open("admin.html", "_blank", "noopener");
   if (adminWindow) {
-    showToast("Admin dashboard unlocked in a new window.");
+    showToast(payload.created ? "First admin account created. Admin window opened." : "Admin dashboard unlocked in a new window.");
   } else {
-    showToast("Admin login succeeded. Popup blocked, so open admin.html manually.");
+    showToast(payload.created ? "First admin created. Open admin.html manually." : "Admin login succeeded. Popup blocked, so open admin.html manually.");
   }
 }
 
@@ -2334,11 +2332,14 @@ async function saveSchedule(formData, form) {
   const routeId = formData.get("routeId");
   const busId = formData.get("busId");
   const date = formData.get("date");
+  const additionalDatesValue = formData.get("additionalDates");
   const departureTime = formData.get("departureTime");
   const arrivalTime = formData.get("arrivalTime");
   const fare = Number(formData.get("fare") || 0);
   const route = getRoute(routeId);
   const stopFares = parseStopFares(formData.get("stopFares"));
+  const isEditing = Boolean(formData.get("scheduleId"));
+  const scheduleDates = parseScheduleDates(date, additionalDatesValue, isEditing);
 
   if (!date || !departureTime || !arrivalTime) {
     throw new Error("Date, departure time, and arrival time are required.");
@@ -2355,33 +2356,36 @@ async function saveSchedule(formData, form) {
     }
   });
 
-  const existingSchedules = state.db.schedules.filter(
-    (schedule) => schedule.busId === busId && schedule.date === date && schedule.id !== scheduleId
-  );
-  const hasExactDuplicate = existingSchedules.some((schedule) =>
-    schedule.departureTime === departureTime && schedule.arrivalTime === arrivalTime
-  );
+  scheduleDates.forEach((scheduleDate, index) => {
+    const recordId = isEditing ? scheduleId : uid();
+    const existingSchedules = state.db.schedules.filter(
+      (schedule) => schedule.busId === busId && schedule.date === scheduleDate && schedule.id !== recordId
+    );
+    const hasExactDuplicate = existingSchedules.some((schedule) =>
+      schedule.departureTime === departureTime && schedule.arrivalTime === arrivalTime
+    );
 
-  if (hasExactDuplicate) {
-    throw new Error("This bus already has a schedule with the same departure and arrival time on the selected date.");
-  }
+    if (hasExactDuplicate) {
+      throw new Error(`This bus already has a schedule with the same departure and arrival time on ${scheduleDate}.`);
+    }
 
-  store.put({
-    id: scheduleId,
-    routeId,
-    busId,
-    date,
-    departureTime,
-    arrivalTime,
-    fare,
-    stopFares,
-    status: "On Time",
+    store.put({
+      id: isEditing && index === 0 ? scheduleId : recordId,
+      routeId,
+      busId,
+      date: scheduleDate,
+      departureTime,
+      arrivalTime,
+      fare,
+      stopFares,
+      status: "On Time",
+    });
   });
 
   await transactionDone(transaction);
   await logAuditAction(
-    formData.get("scheduleId") ? "Schedule Updated" : "Schedule Created",
-    `${date} ${departureTime}-${arrivalTime} | Fare ${formatCurrency(fare)}${Object.keys(stopFares).length ? ` | Stop fares: ${Object.keys(stopFares).length}` : ""}`
+    isEditing ? "Schedule Updated" : "Schedule Created",
+    `${scheduleDates.join(", ")} ${departureTime}-${arrivalTime} | Fare ${formatCurrency(fare)}${Object.keys(stopFares).length ? ` | Stop fares: ${Object.keys(stopFares).length}` : ""}`
   );
   await finalizeMutation("save-schedule");
   if (form) {
@@ -2391,7 +2395,7 @@ async function saveSchedule(formData, form) {
   }
   updateScheduleFormStatus();
   renderScheduleConflictHelper();
-  showToast(formData.get("scheduleId") ? "Schedule updated." : "Schedule added.");
+  showToast(isEditing ? "Schedule updated." : `Schedule added for ${scheduleDates.length} date${scheduleDates.length === 1 ? "" : "s"}.`);
 }
 
 function resetScheduleForm() {
@@ -2413,6 +2417,8 @@ function editSchedule(scheduleId) {
   form.querySelector('[name="routeId"]').value = schedule.routeId;
   form.querySelector('[name="busId"]').value = schedule.busId;
   form.querySelector('[name="date"]').value = schedule.date;
+  const additionalDatesInput = form.querySelector('[name="additionalDates"]');
+  if (additionalDatesInput) additionalDatesInput.value = "";
   form.querySelector('[name="departureTime"]').value = schedule.departureTime;
   form.querySelector('[name="arrivalTime"]').value = schedule.arrivalTime;
   const fareInput = form.querySelector('[name="fare"]');

@@ -1,6 +1,7 @@
 const path = require("path");
 const express = require("express");
 const { DatabaseSync } = require("node:sqlite");
+const crypto = require("crypto");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,6 +21,10 @@ db.exec(`
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function uid() {
+  return crypto.randomUUID();
 }
 
 function defaultState() {
@@ -73,6 +78,29 @@ function writeSnapshot(state) {
   return updatedAt;
 }
 
+function normalizeContact(value) {
+  return String(value || "").replace(/\s+/g, "");
+}
+
+function toSafePassenger(passenger) {
+  return {
+    id: passenger.id,
+    name: passenger.name,
+    contact: passenger.contact,
+    role: passenger.role || "user",
+    createdAt: passenger.createdAt,
+  };
+}
+
+function toSafeAdmin(admin) {
+  return {
+    id: admin.id,
+    username: admin.username,
+    fullName: admin.fullName,
+    createdAt: admin.createdAt,
+  };
+}
+
 function getFilteredBookings(snapshotState, filters = {}) {
   return snapshotState.bookings.filter((booking) => {
     if (filters.start && booking.travelDate < filters.start) return false;
@@ -109,6 +137,106 @@ app.post("/api/snapshot", (req, res) => {
 
   const updatedAt = writeSnapshot(state);
   res.json({ ok: true, updatedAt });
+});
+
+app.post("/api/auth/register", (req, res) => {
+  const name = String(req.body?.name || "").trim();
+  const contact = normalizeContact(req.body?.contact);
+  const password = String(req.body?.password || "");
+
+  if (!name || !contact || !password) {
+    res.status(400).json({ error: "Name, contact number, and password are required." });
+    return;
+  }
+
+  const snapshot = readSnapshot();
+  if (snapshot.state.passengers.some((passenger) => normalizeContact(passenger.contact) === contact)) {
+    res.status(409).json({ error: "That contact number is already registered." });
+    return;
+  }
+
+  const passenger = {
+    id: uid(),
+    name,
+    contact,
+    password,
+    role: "user",
+    createdAt: nowIso(),
+  };
+
+  snapshot.state.passengers.push(passenger);
+  const updatedAt = writeSnapshot(snapshot.state);
+  res.json({
+    ok: true,
+    updatedAt,
+    passenger: toSafePassenger(passenger),
+  });
+});
+
+app.post("/api/auth/login", (req, res) => {
+  const contact = normalizeContact(req.body?.contact);
+  const password = String(req.body?.password || "");
+  const snapshot = readSnapshot();
+  const passenger = snapshot.state.passengers.find(
+    (item) => normalizeContact(item.contact) === contact && String(item.password || "") === password
+  );
+
+  if (!passenger) {
+    res.status(401).json({ error: "Passenger account not found." });
+    return;
+  }
+
+  res.json({
+    ok: true,
+    user: toSafePassenger(passenger),
+    updatedAt: snapshot.updatedAt,
+  });
+});
+
+app.post("/api/auth/admin-login", (req, res) => {
+  const username = String(req.body?.username || "").trim();
+  const password = String(req.body?.password || "");
+
+  if (!username || !password) {
+    res.status(400).json({ error: "Username and password are required." });
+    return;
+  }
+
+  const snapshot = readSnapshot();
+
+  if (!snapshot.state.admins.length) {
+    const admin = {
+      id: uid(),
+      username,
+      password,
+      fullName: username,
+      createdAt: nowIso(),
+    };
+    snapshot.state.admins.push(admin);
+    const updatedAt = writeSnapshot(snapshot.state);
+    res.json({
+      ok: true,
+      created: true,
+      admin: toSafeAdmin(admin),
+      updatedAt,
+    });
+    return;
+  }
+
+  const admin = snapshot.state.admins.find(
+    (item) => String(item.username || "").trim() === username && String(item.password || "") === password
+  );
+
+  if (!admin) {
+    res.status(401).json({ error: "Admin credentials are invalid." });
+    return;
+  }
+
+  res.json({
+    ok: true,
+    admin: toSafeAdmin(admin),
+    updatedAt: snapshot.updatedAt,
+  });
 });
 
 app.get("/api/verify/:ticketCode", (req, res) => {
