@@ -96,6 +96,7 @@ https://your-app-name.onrender.com/admin
 
 - Local browser cache: `IndexedDB` database `transitpro-browser-db-clean`
 - Shared server database: [transitpro-shared.db](C:\Users\ryzen\Documents\bus\transitpro-shared.db)
+- Automatic daily backups: [backups](C:\Users\ryzen\Documents\bus\backups)
 
 Browser-side stores include:
 
@@ -118,4 +119,5 @@ Browser-side stores include:
 - Clearing site data in the browser will remove the saved IndexedDB records for that browser profile.
 - Use the admin dashboard backup tools to export and restore JSON backups.
 - Use `Sync Local To Server` when you want to push the current browser copy to the shared server.
+- The server now creates one automatic backup per day in [backups](C:\Users\ryzen\Documents\bus\backups) and keeps a rolling history.
 - Public internet access requires deployment to a hosting provider such as Render, Railway, or another Node host.

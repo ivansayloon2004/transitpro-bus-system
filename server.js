@@ -1,4 +1,5 @@
 const path = require("path");
+const fs = require("fs");
 const express = require("express");
 const { DatabaseSync } = require("node:sqlite");
 const crypto = require("crypto");
@@ -8,6 +9,8 @@ const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
 const DB_PATH = path.join(__dirname, "transitpro-shared.db");
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || "";
+const BACKUP_DIR = path.join(__dirname, "backups");
+const BACKUP_RETENTION_DAYS = Number(process.env.BACKUP_RETENTION_DAYS || 30);
 
 const db = new DatabaseSync(DB_PATH);
 
@@ -25,6 +28,10 @@ function nowIso() {
 
 function uid() {
   return crypto.randomUUID();
+}
+
+function dateTag(date = new Date()) {
+  return date.toISOString().slice(0, 10);
 }
 
 function defaultState() {
@@ -120,6 +127,68 @@ function getFilteredBookings(snapshotState, filters = {}) {
 
     return true;
   });
+}
+
+function ensureBackupDirectory() {
+  fs.mkdirSync(BACKUP_DIR, { recursive: true });
+}
+
+function pruneOldBackups() {
+  ensureBackupDirectory();
+  const files = fs.readdirSync(BACKUP_DIR)
+    .map((fileName) => ({
+      fileName,
+      filePath: path.join(BACKUP_DIR, fileName),
+      stats: fs.statSync(path.join(BACKUP_DIR, fileName)),
+    }))
+    .filter((entry) => entry.stats.isFile())
+    .sort((a, b) => b.stats.mtimeMs - a.stats.mtimeMs);
+
+  const cutoff = Date.now() - (BACKUP_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  files.forEach((entry, index) => {
+    if (entry.stats.mtimeMs < cutoff || index >= BACKUP_RETENTION_DAYS * 2) {
+      fs.unlinkSync(entry.filePath);
+    }
+  });
+}
+
+function createDailyBackup(reason = "scheduled") {
+  ensureBackupDirectory();
+  const tag = dateTag();
+  const jsonBackupPath = path.join(BACKUP_DIR, `transitpro-backup-${tag}.json`);
+  const dbBackupPath = path.join(BACKUP_DIR, `transitpro-backup-${tag}.db`);
+
+  if (fs.existsSync(jsonBackupPath) && fs.existsSync(dbBackupPath)) {
+    return false;
+  }
+
+  const snapshot = readSnapshot();
+  fs.writeFileSync(jsonBackupPath, JSON.stringify({
+    backupDate: nowIso(),
+    reason,
+    snapshot,
+  }, null, 2));
+  fs.copyFileSync(DB_PATH, dbBackupPath);
+  pruneOldBackups();
+  return true;
+}
+
+function startAutomaticBackups() {
+  const createdOnStartup = createDailyBackup("startup");
+  console.log(createdOnStartup
+    ? `TransitPro daily backup created in ${BACKUP_DIR}`
+    : `TransitPro daily backup already exists for ${dateTag()}`);
+
+  setInterval(() => {
+    try {
+      const created = createDailyBackup("daily-check");
+      if (created) {
+        console.log(`TransitPro daily backup created in ${BACKUP_DIR}`);
+      }
+    } catch (error) {
+      console.error("TransitPro automatic backup failed:", error);
+    }
+  }, 60 * 60 * 1000);
 }
 
 app.use(express.json({ limit: "10mb" }));
@@ -327,6 +396,7 @@ app.get("*", (req, res) => {
 });
 
 app.listen(PORT, HOST, () => {
+  startAutomaticBackups();
   console.log(`TransitPro shared server running on http://localhost:${PORT}`);
   if (PUBLIC_BASE_URL) {
     console.log(`TransitPro public access enabled on ${PUBLIC_BASE_URL}`);
