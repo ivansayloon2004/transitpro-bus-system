@@ -1323,6 +1323,10 @@ button:disabled {
   display: none;
 }
 
+.hidden {
+  display: none !important;
+}
+
 .empty-state {
   display: grid;
   place-items: center;

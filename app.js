@@ -42,6 +42,7 @@ const state = {
   activeAdminPanel: "adminOverview",
   printBookingId: null,
   lastReceipt: null,
+  pendingPassengerOtp: null,
   serverSnapshotUpdatedAt: null,
   reportFilters: {
     start: "",
@@ -551,6 +552,35 @@ function getBookingPricing(schedule, destination, passengerCount, discountType) 
     baseFare,
     ...calculateBookingFare(baseFare, passengerCount, discountType),
   };
+}
+
+function resetPassengerOtpFlow() {
+  state.pendingPassengerOtp = null;
+  const otpForm = $("otpLoginForm");
+  const otpStatus = $("otpLoginStatus");
+  if (otpForm) {
+    otpForm.reset();
+    otpForm.classList.add("hidden");
+  }
+  if (otpStatus) {
+    otpStatus.textContent = "Enter the OTP sent to your phone number.";
+  }
+}
+
+function setPassengerOtpFlow(payload) {
+  state.pendingPassengerOtp = {
+    contact: payload.contact,
+    password: payload.password,
+    user: payload.user,
+    expiresAt: payload.expiresAt,
+    mockOtp: payload.mockOtp,
+  };
+  const otpForm = $("otpLoginForm");
+  const otpStatus = $("otpLoginStatus");
+  if (otpForm) otpForm.classList.remove("hidden");
+  if (otpStatus) {
+    otpStatus.textContent = `Mock OTP sent to ${payload.user.contact}. Expires at ${formatDisplayDateTime(payload.expiresAt)}.`;
+  }
 }
 
 async function logAuditAction(action, details) {
@@ -2577,11 +2607,36 @@ function printLatestTicket(bookingId = null, options = {}) {
 async function loginUser(formData) {
   const contact = String(formData.get("contact") || "").replace(/\s+/g, "");
   const password = formData.get("password");
-  const payload = await postJson("/api/auth/login", { contact, password });
+  const payload = await postJson("/api/auth/request-login-otp", { contact, password });
+  setPassengerOtpFlow({
+    contact,
+    password,
+    user: payload.user,
+    expiresAt: payload.expiresAt,
+    mockOtp: payload.mockOtp,
+  });
+  showToast(`Mock OTP sent: ${payload.mockOtp}`);
+}
+
+async function verifyPassengerOtp(formData) {
+  if (!state.pendingPassengerOtp) {
+    throw new Error("Start passenger login first before entering an OTP.");
+  }
+
+  const otp = String(formData.get("otp") || "").trim();
+  if (!otp) {
+    throw new Error("OTP is required.");
+  }
+
+  const payload = await postJson("/api/auth/verify-login-otp", {
+    contact: state.pendingPassengerOtp.contact,
+    otp,
+  });
   await pullSnapshotFromServer(true);
   const user = payload.user;
   state.session = { id: user.id, name: user.name, role: "user" };
   saveSession();
+  resetPassengerOtpFlow();
   refreshUi();
   showToast(`Welcome back, ${user.name}.`);
   if (pageMode === "auth") {
@@ -2592,6 +2647,25 @@ async function loginUser(formData) {
       showToast("Passenger login successful. Open /app manually if the popup was blocked.");
     }
   }
+}
+
+async function resendPassengerOtp() {
+  if (!state.pendingPassengerOtp) {
+    throw new Error("Start passenger login first before requesting another OTP.");
+  }
+
+  const payload = await postJson("/api/auth/request-login-otp", {
+    contact: state.pendingPassengerOtp.contact,
+    password: state.pendingPassengerOtp.password,
+  });
+  setPassengerOtpFlow({
+    contact: state.pendingPassengerOtp.contact,
+    password: state.pendingPassengerOtp.password,
+    user: payload.user,
+    expiresAt: payload.expiresAt,
+    mockOtp: payload.mockOtp,
+  });
+  showToast(`New mock OTP: ${payload.mockOtp}`);
 }
 
 async function registerUser(formData, form) {
@@ -2631,6 +2705,7 @@ async function loginAdmin(formData) {
 
 function logout() {
   state.session = null;
+  resetPassengerOtpFlow();
   saveSession();
   if (pageMode === "admin" || pageMode === "main") {
     window.location.href = "login";
@@ -3456,6 +3531,17 @@ function attachEvents() {
     $("userLoginForm").addEventListener("submit", (event) => {
       event.preventDefault();
       loginUser(new FormData(event.currentTarget)).catch((error) => showToast(error.message));
+    });
+  }
+  if ($("otpLoginForm")) {
+    $("otpLoginForm").addEventListener("submit", (event) => {
+      event.preventDefault();
+      verifyPassengerOtp(new FormData(event.currentTarget)).catch((error) => showToast(error.message));
+    });
+  }
+  if ($("resendOtpBtn")) {
+    $("resendOtpBtn").addEventListener("click", () => {
+      resendPassengerOtp().catch((error) => showToast(error.message));
     });
   }
   if ($("registerForm")) {

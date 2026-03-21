@@ -12,6 +12,8 @@ const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || "";
 const BACKUP_DIR = path.join(__dirname, "backups");
 const BACKUP_RETENTION_DAYS = Number(process.env.BACKUP_RETENTION_DAYS || 30);
 const APP_TIMEZONE = process.env.APP_TIMEZONE || "Asia/Singapore";
+const OTP_TTL_MS = Number(process.env.OTP_TTL_MS || 5 * 60 * 1000);
+const passengerOtpStore = new Map();
 
 const db = new DatabaseSync(DB_PATH);
 
@@ -98,6 +100,19 @@ function writeSnapshot(state) {
 
 function normalizeContact(value) {
   return String(value || "").replace(/\s+/g, "");
+}
+
+function createOtpCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function clearExpiredOtps() {
+  const now = Date.now();
+  for (const [contact, otpRecord] of passengerOtpStore.entries()) {
+    if (otpRecord.expiresAtMs <= now) {
+      passengerOtpStore.delete(contact);
+    }
+  }
 }
 
 function toSafePassenger(passenger) {
@@ -270,6 +285,69 @@ app.post("/api/auth/register", (req, res) => {
     ok: true,
     updatedAt,
     passenger: toSafePassenger(passenger),
+  });
+});
+
+app.post("/api/auth/request-login-otp", (req, res) => {
+  clearExpiredOtps();
+  const contact = normalizeContact(req.body?.contact);
+  const password = String(req.body?.password || "");
+  const snapshot = readSnapshot();
+  const passenger = snapshot.state.passengers.find(
+    (item) => normalizeContact(item.contact) === contact && String(item.password || "") === password
+  );
+
+  if (!passenger) {
+    res.status(401).json({ error: "Passenger account not found." });
+    return;
+  }
+
+  const otp = createOtpCode();
+  const expiresAtMs = Date.now() + OTP_TTL_MS;
+  passengerOtpStore.set(contact, {
+    otp,
+    expiresAtMs,
+    userId: passenger.id,
+  });
+
+  res.json({
+    ok: true,
+    user: toSafePassenger(passenger),
+    expiresAt: new Date(expiresAtMs).toISOString(),
+    mockOtp: otp,
+    updatedAt: snapshot.updatedAt,
+  });
+});
+
+app.post("/api/auth/verify-login-otp", (req, res) => {
+  clearExpiredOtps();
+  const contact = normalizeContact(req.body?.contact);
+  const otp = String(req.body?.otp || "").trim();
+  const otpRecord = passengerOtpStore.get(contact);
+
+  if (!otpRecord) {
+    res.status(410).json({ error: "OTP expired or not requested yet." });
+    return;
+  }
+
+  if (otpRecord.otp !== otp) {
+    res.status(401).json({ error: "OTP is invalid." });
+    return;
+  }
+
+  const snapshot = readSnapshot();
+  const passenger = snapshot.state.passengers.find((item) => item.id === otpRecord.userId);
+  if (!passenger) {
+    passengerOtpStore.delete(contact);
+    res.status(404).json({ error: "Passenger account no longer exists." });
+    return;
+  }
+
+  passengerOtpStore.delete(contact);
+  res.json({
+    ok: true,
+    user: toSafePassenger(passenger),
+    updatedAt: snapshot.updatedAt,
   });
 });
 
