@@ -1,6 +1,6 @@
 const SESSION_KEY = "transitpro-session-v1";
 const DB_NAME = "transitpro-browser-db-clean";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_NAMES = [
   "meta",
   "passengers",
