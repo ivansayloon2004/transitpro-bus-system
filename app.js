@@ -2365,6 +2365,20 @@ function renderAdmin() {
         </article>
       `;
     });
+  const passengerCards = state.db.passengers.map((passenger) => {
+      const passengerBookings = state.db.bookings.filter((booking) => booking.userId === passenger.id).length;
+      return `
+        <article class="admin-card">
+          <div class="admin-card-head">
+            <div><h4>${escapeHtml(passenger.name)}</h4><p class="muted">${escapeHtml(passenger.contact)}</p></div>
+            <span class="pill">${passengerBookings} booking${passengerBookings === 1 ? "" : "s"}</span>
+          </div>
+          <div class="card-actions">
+            <button type="button" data-delete-passenger="${passenger.id}" class="secondary-button">Delete Account</button>
+          </div>
+        </article>
+      `;
+    });
 
   const buildResourceSection = (title, items, emptyText) => `
     <section class="resource-section">
@@ -2381,6 +2395,7 @@ function renderAdmin() {
   const resourceMarkup = [
     buildResourceSection("Buses", busCards, "No buses yet."),
     buildResourceSection("Routes", routeCards, "No routes yet."),
+    buildResourceSection("Passengers", passengerCards, "No passenger accounts yet."),
     buildResourceSection("Staff", staffCards, "No staff records yet."),
     buildResourceSection("Templates", templateCards, "No schedule templates yet."),
   ];
@@ -3390,6 +3405,43 @@ async function deleteRoute(routeId) {
   showToast("Route deleted.");
 }
 
+async function deletePassenger(passengerId) {
+  const passenger = state.db.passengers.find((item) => item.id === passengerId);
+  if (!passenger) {
+    throw new Error("Passenger account not found.");
+  }
+
+  const confirmed = window.confirm(`Delete passenger account for ${passenger.name}? This will also remove related bookings, tickets, and feedback.`);
+  if (!confirmed) {
+    return;
+  }
+
+  const passengerBookings = state.db.bookings.filter((booking) => booking.userId === passengerId);
+  const bookingIds = new Set(passengerBookings.map((booking) => booking.id));
+
+  const db = await openDatabase();
+  const transaction = db.transaction(["passengers", "bookings", "tickets", "feedbacks"], "readwrite");
+  transaction.objectStore("passengers").delete(passengerId);
+
+  const bookingsStore = transaction.objectStore("bookings");
+  passengerBookings.forEach((booking) => bookingsStore.delete(booking.id));
+
+  const ticketsStore = transaction.objectStore("tickets");
+  const tickets = await requestToPromise(ticketsStore.getAll());
+  tickets.filter((ticket) => bookingIds.has(ticket.bookingId)).forEach((ticket) => ticketsStore.delete(ticket.id));
+
+  const feedbacksStore = transaction.objectStore("feedbacks");
+  const feedbacks = await requestToPromise(feedbacksStore.getAll());
+  feedbacks
+    .filter((feedback) => feedback.userId === passengerId || normalizeContactNumber(feedback.contact) === normalizeContactNumber(passenger.contact))
+    .forEach((feedback) => feedbacksStore.delete(feedback.id));
+
+  await transactionDone(transaction);
+  await logAuditAction("Passenger Account Deleted", `${passenger.name} | ${passenger.contact}`);
+  await finalizeMutation("delete-passenger");
+  showToast("Passenger account and related records deleted.");
+}
+
 async function toggleAdminSeat(seatNumber) {
   if (!state.selectedAdminScheduleId) return;
   const currentStatus = getSeatStatus(state.selectedAdminScheduleId, seatNumber);
@@ -3812,6 +3864,7 @@ function attachEvents() {
       const deleteBusTrigger = event.target.closest("[data-delete-bus]");
       const editRouteTrigger = event.target.closest("[data-edit-route]");
       const deleteRouteTrigger = event.target.closest("[data-delete-route]");
+      const deletePassengerTrigger = event.target.closest("[data-delete-passenger]");
       const editStaffTrigger = event.target.closest("[data-edit-staff]");
       const deleteStaffTrigger = event.target.closest("[data-delete-staff]");
       const applyTemplateTrigger = event.target.closest("[data-apply-template]");
@@ -3821,6 +3874,7 @@ function attachEvents() {
       if (deleteBusTrigger) deleteBus(deleteBusTrigger.dataset.deleteBus).catch((error) => showToast(error.message));
       if (editRouteTrigger) editRoute(editRouteTrigger.dataset.editRoute);
       if (deleteRouteTrigger) deleteRoute(deleteRouteTrigger.dataset.deleteRoute).catch((error) => showToast(error.message));
+      if (deletePassengerTrigger) deletePassenger(deletePassengerTrigger.dataset.deletePassenger).catch((error) => showToast(error.message));
       if (editStaffTrigger) editStaff(editStaffTrigger.dataset.editStaff);
       if (deleteStaffTrigger) deleteStaff(deleteStaffTrigger.dataset.deleteStaff).catch((error) => showToast(error.message));
       if (applyTemplateTrigger) applyScheduleTemplate(applyTemplateTrigger.dataset.applyTemplate);
