@@ -2395,7 +2395,6 @@ function renderAdmin() {
   const resourceMarkup = [
     buildResourceSection("Buses", busCards, "No buses yet."),
     buildResourceSection("Routes", routeCards, "No routes yet."),
-    buildResourceSection("Passengers", passengerCards, "No passenger accounts yet."),
     buildResourceSection("Staff", staffCards, "No staff records yet."),
     buildResourceSection("Templates", templateCards, "No schedule templates yet."),
   ];
@@ -2403,6 +2402,13 @@ function renderAdmin() {
   $("adminResources").innerHTML = resourceMarkup.length
     ? resourceMarkup.join("")
     : `<div class="empty-state">No buses or routes yet. Add your first records here.</div>`;
+
+  if ($("adminPassengersList")) {
+    $("adminPassengersList").className = passengerCards.length ? "admin-list" : "admin-list empty-state";
+    $("adminPassengersList").innerHTML = passengerCards.length
+      ? passengerCards.join("")
+      : "No passenger accounts yet.";
+  }
 
   $("adminBookings").innerHTML = state.db.bookings.length ? [...state.db.bookings]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -3864,7 +3870,6 @@ function attachEvents() {
       const deleteBusTrigger = event.target.closest("[data-delete-bus]");
       const editRouteTrigger = event.target.closest("[data-edit-route]");
       const deleteRouteTrigger = event.target.closest("[data-delete-route]");
-      const deletePassengerTrigger = event.target.closest("[data-delete-passenger]");
       const editStaffTrigger = event.target.closest("[data-edit-staff]");
       const deleteStaffTrigger = event.target.closest("[data-delete-staff]");
       const applyTemplateTrigger = event.target.closest("[data-apply-template]");
@@ -3874,11 +3879,18 @@ function attachEvents() {
       if (deleteBusTrigger) deleteBus(deleteBusTrigger.dataset.deleteBus).catch((error) => showToast(error.message));
       if (editRouteTrigger) editRoute(editRouteTrigger.dataset.editRoute);
       if (deleteRouteTrigger) deleteRoute(deleteRouteTrigger.dataset.deleteRoute).catch((error) => showToast(error.message));
-      if (deletePassengerTrigger) deletePassenger(deletePassengerTrigger.dataset.deletePassenger).catch((error) => showToast(error.message));
       if (editStaffTrigger) editStaff(editStaffTrigger.dataset.editStaff);
       if (deleteStaffTrigger) deleteStaff(deleteStaffTrigger.dataset.deleteStaff).catch((error) => showToast(error.message));
       if (applyTemplateTrigger) applyScheduleTemplate(applyTemplateTrigger.dataset.applyTemplate);
       if (deleteTemplateTrigger) deleteScheduleTemplate(deleteTemplateTrigger.dataset.deleteTemplate).catch((error) => showToast(error.message));
+    });
+  }
+  if ($("adminPassengersList")) {
+    $("adminPassengersList").addEventListener("click", (event) => {
+      const deletePassengerTrigger = event.target.closest("[data-delete-passenger]");
+      if (deletePassengerTrigger) {
+        deletePassenger(deletePassengerTrigger.dataset.deletePassenger).catch((error) => showToast(error.message));
+      }
     });
   }
 

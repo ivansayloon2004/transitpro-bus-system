@@ -42,6 +42,7 @@
       <nav class="main-nav admin-subnav">
         <button class="nav-link admin-panel-link active" data-admin-panel="adminOverview" type="button">Overview</button>
         <button class="nav-link admin-panel-link" data-admin-panel="adminSchedulesPanel" type="button">Schedules</button>
+        <button class="nav-link admin-panel-link" data-admin-panel="adminPassengersPanel" type="button">Passengers</button>
         <button class="nav-link admin-panel-link" data-admin-panel="adminSeatsPanel" type="button">Seats</button>
         <button class="nav-link admin-panel-link" data-admin-panel="adminResourcesPanel" type="button">Buses & Routes</button>
         <button class="nav-link admin-panel-link" data-admin-panel="adminManifestPanel" type="button">Manifest</button>
@@ -190,6 +191,18 @@
                 </div>
                 <div class="schedule-type-quickbar" id="scheduleTypeQuickbar"></div>
                 <div id="adminSchedules" class="admin-list"></div>
+              </div>
+
+              <div class="panel ops-panel" id="adminPassengersPanel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Passenger Accounts</p>
+                    <h3>Manage Registered Passengers</h3>
+                  </div>
+                </div>
+                <div id="adminPassengersList" class="admin-list empty-state">
+                  No passenger accounts yet.
+                </div>
               </div>
 
               <div class="panel ops-panel" id="adminSeatsPanel">
