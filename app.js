@@ -574,12 +574,13 @@ function setPassengerOtpFlow(payload) {
     user: payload.user,
     expiresAt: payload.expiresAt,
     mockOtp: payload.mockOtp,
+    deliveryMode: payload.deliveryMode || "mock",
   };
   const otpForm = $("otpLoginForm");
   const otpStatus = $("otpLoginStatus");
   if (otpForm) otpForm.classList.remove("hidden");
   if (otpStatus) {
-    otpStatus.textContent = `Mock OTP sent to ${payload.user.contact}. Expires at ${formatDisplayDateTime(payload.expiresAt)}.`;
+    otpStatus.textContent = `${payload.deliveryMode === "sms" ? "SMS OTP" : "Mock OTP"} sent to ${payload.user.contact}. Expires at ${formatDisplayDateTime(payload.expiresAt)}.`;
   }
 }
 
@@ -2614,8 +2615,9 @@ async function loginUser(formData) {
     user: payload.user,
     expiresAt: payload.expiresAt,
     mockOtp: payload.mockOtp,
+    deliveryMode: payload.deliveryMode,
   });
-  showToast(`Mock OTP sent: ${payload.mockOtp}`);
+  showToast(payload.deliveryMode === "sms" ? "OTP sent by SMS. Enter the code to continue." : `Mock OTP sent: ${payload.mockOtp}`);
 }
 
 async function verifyPassengerOtp(formData) {
@@ -2664,8 +2666,9 @@ async function resendPassengerOtp() {
     user: payload.user,
     expiresAt: payload.expiresAt,
     mockOtp: payload.mockOtp,
+    deliveryMode: payload.deliveryMode,
   });
-  showToast(`New mock OTP: ${payload.mockOtp}`);
+  showToast(payload.deliveryMode === "sms" ? "A new OTP was sent by SMS." : `New mock OTP: ${payload.mockOtp}`);
 }
 
 async function registerUser(formData, form) {

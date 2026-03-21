@@ -13,6 +13,9 @@ const BACKUP_DIR = path.join(__dirname, "backups");
 const BACKUP_RETENTION_DAYS = Number(process.env.BACKUP_RETENTION_DAYS || 30);
 const APP_TIMEZONE = process.env.APP_TIMEZONE || "Asia/Singapore";
 const OTP_TTL_MS = Number(process.env.OTP_TTL_MS || 5 * 60 * 1000);
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || "";
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || "";
+const TWILIO_VERIFY_SERVICE_SID = process.env.TWILIO_VERIFY_SERVICE_SID || "";
 const passengerOtpStore = new Map();
 
 const db = new DatabaseSync(DB_PATH);
@@ -113,6 +116,100 @@ function clearExpiredOtps() {
       passengerOtpStore.delete(contact);
     }
   }
+}
+
+function isTwilioOtpConfigured() {
+  return Boolean(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_VERIFY_SERVICE_SID);
+}
+
+function formatPhoneForSms(contact) {
+  const normalized = normalizeContact(contact).replace(/[^\d+]/g, "");
+  if (normalized.startsWith("+")) return normalized;
+  if (normalized.startsWith("0")) return `+63${normalized.slice(1)}`;
+  if (normalized.startsWith("63")) return `+${normalized}`;
+  return normalized;
+}
+
+async function sendPassengerOtp(contact) {
+  if (!isTwilioOtpConfigured()) {
+    const otp = createOtpCode();
+    const expiresAtMs = Date.now() + OTP_TTL_MS;
+    passengerOtpStore.set(contact, { otp, expiresAtMs });
+    return {
+      deliveryMode: "mock",
+      expiresAt: new Date(expiresAtMs).toISOString(),
+      mockOtp: otp,
+    };
+  }
+
+  const response = await fetch(
+    `https://verify.twilio.com/v2/Services/${TWILIO_VERIFY_SERVICE_SID}/Verifications`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString("base64")}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        To: formatPhoneForSms(contact),
+        Channel: "sms",
+      }),
+    }
+  );
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.message || "Unable to send SMS OTP right now.");
+  }
+
+  return {
+    deliveryMode: "sms",
+    expiresAt: new Date(Date.now() + OTP_TTL_MS).toISOString(),
+    twilioSid: data.sid,
+  };
+}
+
+async function verifyPassengerOtp(contact, otp) {
+  if (!isTwilioOtpConfigured()) {
+    clearExpiredOtps();
+    const otpRecord = passengerOtpStore.get(contact);
+    if (!otpRecord) {
+      throw new Error("OTP expired or not requested yet.");
+    }
+    if (otpRecord.otp !== otp) {
+      throw new Error("OTP is invalid.");
+    }
+    passengerOtpStore.delete(contact);
+    return { deliveryMode: "mock" };
+  }
+
+  const response = await fetch(
+    `https://verify.twilio.com/v2/Services/${TWILIO_VERIFY_SERVICE_SID}/VerificationCheck`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString("base64")}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        To: formatPhoneForSms(contact),
+        Code: otp,
+      }),
+    }
+  );
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.message || "Unable to verify SMS OTP right now.");
+  }
+  if (data.status !== "approved") {
+    throw new Error("OTP is invalid.");
+  }
+
+  return {
+    deliveryMode: "sms",
+    twilioStatus: data.status,
+  };
 }
 
 function toSafePassenger(passenger) {
@@ -302,53 +399,47 @@ app.post("/api/auth/request-login-otp", (req, res) => {
     return;
   }
 
-  const otp = createOtpCode();
-  const expiresAtMs = Date.now() + OTP_TTL_MS;
-  passengerOtpStore.set(contact, {
-    otp,
-    expiresAtMs,
-    userId: passenger.id,
-  });
-
-  res.json({
-    ok: true,
-    user: toSafePassenger(passenger),
-    expiresAt: new Date(expiresAtMs).toISOString(),
-    mockOtp: otp,
-    updatedAt: snapshot.updatedAt,
-  });
+  sendPassengerOtp(contact)
+    .then((otpPayload) => {
+      res.json({
+        ok: true,
+        user: toSafePassenger(passenger),
+        expiresAt: otpPayload.expiresAt,
+        mockOtp: otpPayload.mockOtp || null,
+        deliveryMode: otpPayload.deliveryMode,
+        updatedAt: snapshot.updatedAt,
+      });
+    })
+    .catch((error) => {
+      res.status(502).json({ error: error.message || "Unable to send OTP right now." });
+    });
 });
 
 app.post("/api/auth/verify-login-otp", (req, res) => {
-  clearExpiredOtps();
   const contact = normalizeContact(req.body?.contact);
   const otp = String(req.body?.otp || "").trim();
-  const otpRecord = passengerOtpStore.get(contact);
-
-  if (!otpRecord) {
-    res.status(410).json({ error: "OTP expired or not requested yet." });
-    return;
-  }
-
-  if (otpRecord.otp !== otp) {
-    res.status(401).json({ error: "OTP is invalid." });
-    return;
-  }
-
   const snapshot = readSnapshot();
-  const passenger = snapshot.state.passengers.find((item) => item.id === otpRecord.userId);
+  const passenger = snapshot.state.passengers.find((item) => normalizeContact(item.contact) === contact);
+
   if (!passenger) {
-    passengerOtpStore.delete(contact);
     res.status(404).json({ error: "Passenger account no longer exists." });
     return;
   }
 
-  passengerOtpStore.delete(contact);
-  res.json({
-    ok: true,
-    user: toSafePassenger(passenger),
-    updatedAt: snapshot.updatedAt,
-  });
+  verifyPassengerOtp(contact, otp)
+    .then((verification) => {
+      res.json({
+        ok: true,
+        user: toSafePassenger(passenger),
+        deliveryMode: verification.deliveryMode,
+        updatedAt: snapshot.updatedAt,
+      });
+    })
+    .catch((error) => {
+      const message = error.message || "OTP verification failed.";
+      const status = message.includes("expired") ? 410 : 401;
+      res.status(status).json({ error: message });
+    });
 });
 
 app.post("/api/auth/login", (req, res) => {

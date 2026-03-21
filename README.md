@@ -79,9 +79,14 @@ This project is prepared for deployment on Render.
 2. Create a new Render Web Service from that repo.
 3. Use Node `22` or newer.
 4. Render can detect [render.yaml](C:\Users\ryzen\Documents\bus\render.yaml) automatically.
-5. Set an environment variable:
+5. Set these environment variables:
    - `PUBLIC_BASE_URL=https://your-app-name.onrender.com`
+   - `TWILIO_ACCOUNT_SID=...`
+   - `TWILIO_AUTH_TOKEN=...`
+   - `TWILIO_VERIFY_SERVICE_SID=...`
 6. Deploy.
+
+If the Twilio variables are missing, passenger OTP login falls back to mock mode for local testing.
 
 After deployment, everyone can open the public URL, for example:
 
