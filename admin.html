@@ -331,6 +331,17 @@
                     <h3>Bookings and Ticket Sales</h3>
                   </div>
                 </div>
+                <form id="rebookForm" class="booking-form compact-form">
+                  <input type="hidden" name="bookingId" />
+                  <div class="form-status" id="rebookFormStatus">Select a booking to rebook</div>
+                  <label>
+                    New Schedule
+                    <select name="scheduleId" id="rebookScheduleSelect">
+                      <option value="">Choose schedule</option>
+                    </select>
+                  </label>
+                  <button type="submit">Save Rebooking</button>
+                </form>
                 <div id="adminBookings" class="admin-list"></div>
               </div>
 

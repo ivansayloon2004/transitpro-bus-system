@@ -108,6 +108,16 @@
                     Number of Passengers
                     <input name="passengerCount" type="number" min="1" max="6" value="1" required />
                   </label>
+                  <label>
+                    Fare Discount
+                    <select name="discountType" id="discountTypeSelect">
+                      <option value="Regular">Regular</option>
+                      <option value="Student">Student - 20%</option>
+                      <option value="Senior Citizen">Senior Citizen - 20%</option>
+                      <option value="PWD">PWD - 20%</option>
+                      <option value="Child">Child - 10%</option>
+                    </select>
+                  </label>
                   <button type="submit">Find Available Schedules</button>
                 </form>
               </div>

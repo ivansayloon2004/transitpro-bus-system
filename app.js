@@ -55,6 +55,13 @@ const state = {
 
 let dbPromise;
 const syncChannel = "BroadcastChannel" in window ? new BroadcastChannel("transitpro-sync") : null;
+const DISCOUNT_RATES = {
+  Regular: 0,
+  Student: 0.2,
+  "Senior Citizen": 0.2,
+  PWD: 0.2,
+  Child: 0.1,
+};
 
 const pageMode = document.body.dataset.page || "main";
 
@@ -520,6 +527,32 @@ function getPaymentStatusClass(status) {
   return "payment-processing";
 }
 
+function getDiscountRate(discountType) {
+  return DISCOUNT_RATES[discountType] || 0;
+}
+
+function calculateBookingFare(baseFare, passengerCount, discountType) {
+  const subtotal = Number(baseFare || 0) * Number(passengerCount || 0);
+  const discountRate = getDiscountRate(discountType);
+  const discountAmount = subtotal * discountRate;
+  return {
+    subtotal,
+    discountRate,
+    discountAmount,
+    total: subtotal - discountAmount,
+  };
+}
+
+function getBookingPricing(schedule, destination, passengerCount, discountType) {
+  const route = getRoute(schedule.routeId);
+  const baseFare = getDestinationFare(route, schedule, destination);
+  return {
+    route,
+    baseFare,
+    ...calculateBookingFare(baseFare, passengerCount, discountType),
+  };
+}
+
 async function logAuditAction(action, details) {
   if (!state.session || state.session.role !== "admin") return;
   const db = await openDatabase();
@@ -592,13 +625,18 @@ function renderPaymentHelper() {
   }
 
   const schedule = getSchedule(state.selectedScheduleId);
-  const total = getDestinationFare(getRoute(schedule.routeId), schedule, state.bookingSearch?.destination) * seats;
+  const pricing = getBookingPricing(
+    schedule,
+    state.bookingSearch?.destination,
+    seats,
+    state.bookingSearch?.discountType || "Regular"
+  );
   if (!paymentMethod) {
-    helper.textContent = `Amount due: ${formatCurrency(total)}. Choose a payment method to continue.`;
+    helper.textContent = `Amount due: ${formatCurrency(pricing.total)}. Choose a payment method to continue.`;
     return;
   }
 
-  helper.innerHTML = `<strong>${paymentMethod}</strong><br />Simulated payment amount: ${formatCurrency(total)}${paymentReference ? `<br />Reference: ${paymentReference}` : ""}`;
+  helper.innerHTML = `<strong>${paymentMethod}</strong><br />Simulated payment amount: ${formatCurrency(pricing.total)}${pricing.discountAmount ? `<br />Discount applied: ${state.bookingSearch?.discountType} (-${formatCurrency(pricing.discountAmount)})` : ""}${paymentReference ? `<br />Reference: ${paymentReference}` : ""}`;
   const referenceInput = $("paymentReferenceInput");
   if (referenceInput) {
     referenceInput.placeholder = paymentMethod
@@ -827,9 +865,14 @@ function openPaymentModal() {
   }
 
   const schedule = getSchedule(state.selectedScheduleId);
-  const route = getRoute(schedule.routeId);
+  const pricing = getBookingPricing(
+    schedule,
+    state.bookingSearch.destination,
+    state.selectedSeats.length,
+    state.bookingSearch.discountType || "Regular"
+  );
+  const route = pricing.route;
   const bus = getBus(schedule.busId);
-  const total = getDestinationFare(route, schedule, state.bookingSearch.destination) * state.selectedSeats.length;
   const modalBody = $("paymentModalBody");
   const backdrop = $("paymentModalBackdrop");
   if (!modalBody || !backdrop) return;
@@ -853,7 +896,9 @@ function openPaymentModal() {
       <div><span>Seats</span><strong>${state.selectedSeats.join(", ")}</strong></div>
       <div><span>Payment Method</span><strong>${payment.paymentMethod}</strong></div>
       <div><span>${getPaymentReferenceLabel(payment.paymentMethod)}</span><strong>${payment.paymentReference || "Auto-generated at payment"}</strong></div>
-      <div><span>Total Amount</span><strong>${formatCurrency(total)}</strong></div>
+      <div><span>Discount</span><strong>${state.bookingSearch.discountType || "Regular"}</strong></div>
+      <div><span>Discount Amount</span><strong>${formatCurrency(pricing.discountAmount)}</strong></div>
+      <div><span>Total Amount</span><strong>${formatCurrency(pricing.total)}</strong></div>
       <div><span>Status After Payment</span><strong>Paid / Pending Admin Confirmation</strong></div>
     </div>
   `;
@@ -1700,9 +1745,14 @@ function renderScheduleResults() {
 
   container.className = "schedule-results";
   container.innerHTML = matches.map((schedule) => {
-    const route = getRoute(schedule.routeId);
+    const pricing = getBookingPricing(
+      schedule,
+      state.bookingSearch.destination,
+      state.bookingSearch.passengerCount,
+      state.bookingSearch.discountType || "Regular"
+    );
+    const route = pricing.route;
     const bus = getBus(schedule.busId);
-    const fare = getDestinationFare(route, schedule, state.bookingSearch.destination);
     const occupiedSeats = getScheduleBookings(schedule.id).flatMap((booking) => booking.seatNumbers).length;
     const reservedSeats = state.db.seatStates.filter((seatState) => seatState.scheduleId === schedule.id && seatState.status === "reserved").length;
     const availableSeats = bus.capacity - occupiedSeats - reservedSeats;
@@ -1717,10 +1767,12 @@ function renderScheduleResults() {
           <span class="pill ${availableSeats < 6 ? "warn" : ""}">${schedule.status}</span>
         </div>
         <div class="schedule-meta">
-          <div><span class="muted">Fare</span><strong>${formatCurrency(fare)}</strong></div>
+          <div><span class="muted">Base Fare</span><strong>${formatCurrency(pricing.baseFare)}</strong></div>
           <div><span class="muted">Bus</span><strong>${bus.plateNumber}</strong></div>
           <div><span class="muted">Available Seats</span><strong>${availableSeats}</strong></div>
+          <div><span class="muted">Estimated Total</span><strong>${formatCurrency(pricing.total)}</strong></div>
         </div>
+        ${pricing.discountAmount ? `<p class="muted">Discount: ${state.bookingSearch.discountType} (-${formatCurrency(pricing.discountAmount)})</p>` : ""}
         <div class="card-actions">
           <button type="button" data-schedule="${schedule.id}" class="select-schedule-btn">Select Schedule</button>
         </div>
@@ -1755,12 +1807,18 @@ function renderSeatMap() {
   }).join("");
 
   const route = getRoute(schedule.routeId);
-  const fare = getDestinationFare(route, schedule, state.bookingSearch?.destination);
-  const total = fare * state.selectedSeats.length;
+  const pricing = getBookingPricing(
+    schedule,
+    state.bookingSearch?.destination,
+    state.selectedSeats.length,
+    state.bookingSearch?.discountType || "Regular"
+  );
   summary.innerHTML = `
     <strong>${route.origin} -> ${state.bookingSearch?.destination || route.destination}</strong><br />
     Selected seats: ${state.selectedSeats.length ? state.selectedSeats.join(", ") : "None"}<br />
-    Fare calculation: ${formatCurrency(fare)} x ${state.selectedSeats.length || 0} = ${formatCurrency(total)}
+    Fare calculation: ${formatCurrency(pricing.baseFare)} x ${state.selectedSeats.length || 0} = ${formatCurrency(pricing.subtotal)}
+    ${pricing.discountAmount ? `<br />${state.bookingSearch?.discountType} discount: -${formatCurrency(pricing.discountAmount)}` : ""}
+    <br />Total due: ${formatCurrency(pricing.total)}
   `;
 }
 
@@ -1774,10 +1832,15 @@ function renderBookingSummary() {
   }
 
   const schedule = getSchedule(state.selectedScheduleId);
-  const route = getRoute(schedule.routeId);
+  const pricing = getBookingPricing(
+    schedule,
+    state.bookingSearch.destination,
+    state.selectedSeats.length,
+    state.bookingSearch.discountType || "Regular"
+  );
+  const route = pricing.route;
   const bus = getBus(schedule.busId);
   const payment = getPaymentDetails();
-  const fare = getDestinationFare(route, schedule, state.bookingSearch.destination) * state.selectedSeats.length;
   container.className = "booking-summary";
   container.innerHTML = `
     <div class="ticket-card">
@@ -1791,7 +1854,10 @@ function renderBookingSummary() {
         <div><span>Bus</span><strong>${bus.plateNumber}</strong></div>
         <div><span>Seats</span><strong>${state.selectedSeats.join(", ") || "Select seats"}</strong></div>
         <div><span>Passengers</span><strong>${state.bookingSearch.passengerCount}</strong></div>
-        <div><span>Total Fare</span><strong>${formatCurrency(fare)}</strong></div>
+        <div><span>Base Fare</span><strong>${formatCurrency(pricing.baseFare)}</strong></div>
+        <div><span>Discount</span><strong>${state.bookingSearch.discountType || "Regular"}</strong></div>
+        <div><span>Discount Amount</span><strong>${formatCurrency(pricing.discountAmount)}</strong></div>
+        <div><span>Total Fare</span><strong>${formatCurrency(pricing.total)}</strong></div>
         <div><span>Payment Method</span><strong>${payment.paymentMethod || "Select payment method"}</strong></div>
         <div><span>Payment Status</span><strong>${payment.paymentMethod ? "Ready for simulated payment" : "Waiting for payment setup"}</strong></div>
       </div>
@@ -1836,6 +1902,8 @@ function renderHistory() {
           <div><span class="muted">Departure</span><strong>${schedule ? schedule.departureTime : "--:--"}</strong></div>
           <div><span class="muted">Seats</span><strong>${booking.seatNumbers.join(", ")}</strong></div>
           <div><span class="muted">Passengers</span><strong>${booking.passengerCount}</strong></div>
+          <div><span class="muted">Discount</span><strong>${booking.discountType || "Regular"}</strong></div>
+          <div><span class="muted">Discount Amount</span><strong>${formatCurrency(booking.discountAmount || 0)}</strong></div>
           <div><span class="muted">Total Fare</span><strong>${formatCurrency(booking.totalFare)}</strong></div>
           <div><span class="muted">Travel Date</span><strong>${booking.travelDate}</strong></div>
           <div><span class="muted">Payment</span><strong class="inline-pill ${getPaymentStatusClass(booking.paymentStatus || "Unpaid")}">${booking.paymentStatus || "Unpaid"}</strong></div>
@@ -2206,6 +2274,7 @@ function renderAdmin() {
             <span class="pill">${formatCurrency(booking.totalFare)}</span>
           </div>
           <p class="muted">Seats: ${booking.seatNumbers.join(", ")} | Ticket: ${ticket ? ticket.ticketCode : "Pending"} | Status: <span class="inline-pill ${getBookingStatusClass(booking.status)}">${booking.status}</span></p>
+          <p class="muted">Fare: ${formatCurrency(booking.totalFare)}${booking.discountAmount ? ` | ${booking.discountType || "Discount"}: -${formatCurrency(booking.discountAmount)}` : ""}</p>
           <p class="muted">Payment: <span class="inline-pill ${getPaymentStatusClass(booking.paymentStatus || "Unpaid")}">${booking.paymentStatus || "Unpaid"}</span> | Method: ${booking.paymentMethod || "Not set"}${booking.paymentReference ? ` | Ref: ${booking.paymentReference}` : ""}</p>
           <p class="muted">Boarding: <span class="inline-pill ${getBoardingStatusClass(booking.boardingStatus || "Awaiting Boarding")}">${booking.boardingStatus || "Awaiting Boarding"}</span></p>
           <div class="card-actions">
@@ -2338,6 +2407,7 @@ function handleBookingSearch(formData) {
     destination: formData.get("destination"),
     busId: formData.get("busId"),
     passengerCount: Number(formData.get("passengerCount")),
+    discountType: formData.get("discountType") || "Regular",
   };
 
   if (state.bookingSearch.origin === state.bookingSearch.destination) {
@@ -2452,8 +2522,12 @@ async function confirmBooking() {
   }
 
   const schedule = getSchedule(state.selectedScheduleId);
-  const route = getRoute(schedule.routeId);
-  const fare = getDestinationFare(route, schedule, state.bookingSearch.destination);
+  const pricing = getBookingPricing(
+    schedule,
+    state.bookingSearch.destination,
+    state.selectedSeats.length,
+    state.bookingSearch.discountType || "Regular"
+  );
   const paymentCode = `PAY-${Math.floor(100000 + Math.random() * 899999)}`;
   const receipt = await createBooking({
     userId: state.session.id,
@@ -2465,7 +2539,12 @@ async function confirmBooking() {
     passengerCount: state.bookingSearch.passengerCount,
     scheduleId: state.selectedScheduleId,
     seatNumbers: [...state.selectedSeats],
-    totalFare: fare * state.selectedSeats.length,
+    baseFare: pricing.baseFare,
+    subtotalFare: pricing.subtotal,
+    discountType: state.bookingSearch.discountType || "Regular",
+    discountRate: pricing.discountRate,
+    discountAmount: pricing.discountAmount,
+    totalFare: pricing.total,
     boardingStatus: "Awaiting Boarding",
     paymentMethod: payment.paymentMethod,
     paymentReference: payment.paymentReference || paymentCode,
@@ -3291,6 +3370,16 @@ function attachEvents() {
   }
   if ($("paymentMethodSelect")) {
     $("paymentMethodSelect").addEventListener("change", () => {
+      renderBookingSummary();
+      renderPaymentHelper();
+    });
+  }
+  if ($("discountTypeSelect")) {
+    $("discountTypeSelect").addEventListener("change", (event) => {
+      if (!state.bookingSearch) return;
+      state.bookingSearch.discountType = event.target.value || "Regular";
+      renderScheduleResults();
+      renderSeatMap();
       renderBookingSummary();
       renderPaymentHelper();
     });
