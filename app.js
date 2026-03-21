@@ -2395,8 +2395,6 @@ function renderAdmin() {
   const resourceMarkup = [
     buildResourceSection("Buses", busCards, "No buses yet."),
     buildResourceSection("Routes", routeCards, "No routes yet."),
-    buildResourceSection("Staff", staffCards, "No staff records yet."),
-    buildResourceSection("Templates", templateCards, "No schedule templates yet."),
   ];
 
   $("adminResources").innerHTML = resourceMarkup.length
@@ -2408,6 +2406,18 @@ function renderAdmin() {
     $("adminPassengersList").innerHTML = passengerCards.length
       ? passengerCards.join("")
       : "No passenger accounts yet.";
+  }
+  if ($("adminStaffList")) {
+    $("adminStaffList").className = staffCards.length ? "admin-list" : "admin-list empty-state";
+    $("adminStaffList").innerHTML = staffCards.length
+      ? staffCards.join("")
+      : "No staff records yet.";
+  }
+  if ($("adminTemplateList")) {
+    $("adminTemplateList").className = templateCards.length ? "admin-list" : "admin-list empty-state";
+    $("adminTemplateList").innerHTML = templateCards.length
+      ? templateCards.join("")
+      : "No schedule templates yet.";
   }
 
   $("adminBookings").innerHTML = state.db.bookings.length ? [...state.db.bookings]
@@ -3870,19 +3880,11 @@ function attachEvents() {
       const deleteBusTrigger = event.target.closest("[data-delete-bus]");
       const editRouteTrigger = event.target.closest("[data-edit-route]");
       const deleteRouteTrigger = event.target.closest("[data-delete-route]");
-      const editStaffTrigger = event.target.closest("[data-edit-staff]");
-      const deleteStaffTrigger = event.target.closest("[data-delete-staff]");
-      const applyTemplateTrigger = event.target.closest("[data-apply-template]");
-      const deleteTemplateTrigger = event.target.closest("[data-delete-template]");
 
       if (editBusTrigger) editBus(editBusTrigger.dataset.editBus);
       if (deleteBusTrigger) deleteBus(deleteBusTrigger.dataset.deleteBus).catch((error) => showToast(error.message));
       if (editRouteTrigger) editRoute(editRouteTrigger.dataset.editRoute);
       if (deleteRouteTrigger) deleteRoute(deleteRouteTrigger.dataset.deleteRoute).catch((error) => showToast(error.message));
-      if (editStaffTrigger) editStaff(editStaffTrigger.dataset.editStaff);
-      if (deleteStaffTrigger) deleteStaff(deleteStaffTrigger.dataset.deleteStaff).catch((error) => showToast(error.message));
-      if (applyTemplateTrigger) applyScheduleTemplate(applyTemplateTrigger.dataset.applyTemplate);
-      if (deleteTemplateTrigger) deleteScheduleTemplate(deleteTemplateTrigger.dataset.deleteTemplate).catch((error) => showToast(error.message));
     });
   }
   if ($("adminPassengersList")) {
@@ -3891,6 +3893,22 @@ function attachEvents() {
       if (deletePassengerTrigger) {
         deletePassenger(deletePassengerTrigger.dataset.deletePassenger).catch((error) => showToast(error.message));
       }
+    });
+  }
+  if ($("adminStaffList")) {
+    $("adminStaffList").addEventListener("click", (event) => {
+      const editStaffTrigger = event.target.closest("[data-edit-staff]");
+      const deleteStaffTrigger = event.target.closest("[data-delete-staff]");
+      if (editStaffTrigger) editStaff(editStaffTrigger.dataset.editStaff);
+      if (deleteStaffTrigger) deleteStaff(deleteStaffTrigger.dataset.deleteStaff).catch((error) => showToast(error.message));
+    });
+  }
+  if ($("adminTemplateList")) {
+    $("adminTemplateList").addEventListener("click", (event) => {
+      const applyTemplateTrigger = event.target.closest("[data-apply-template]");
+      const deleteTemplateTrigger = event.target.closest("[data-delete-template]");
+      if (applyTemplateTrigger) applyScheduleTemplate(applyTemplateTrigger.dataset.applyTemplate);
+      if (deleteTemplateTrigger) deleteScheduleTemplate(deleteTemplateTrigger.dataset.deleteTemplate).catch((error) => showToast(error.message));
     });
   }
 
