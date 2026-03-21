@@ -13,6 +13,7 @@ const BACKUP_DIR = path.join(__dirname, "backups");
 const BACKUP_RETENTION_DAYS = Number(process.env.BACKUP_RETENTION_DAYS || 30);
 const APP_TIMEZONE = process.env.APP_TIMEZONE || "Asia/Singapore";
 const OTP_TTL_MS = Number(process.env.OTP_TTL_MS || 5 * 60 * 1000);
+const USE_TWILIO_OTP = process.env.USE_TWILIO_OTP === "true";
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || "";
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || "";
 const TWILIO_VERIFY_SERVICE_SID = process.env.TWILIO_VERIFY_SERVICE_SID || "";
@@ -126,7 +127,7 @@ function clearExpiredOtps() {
 }
 
 function isTwilioOtpConfigured() {
-  return Boolean(TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_VERIFY_SERVICE_SID);
+  return Boolean(USE_TWILIO_OTP && TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_VERIFY_SERVICE_SID);
 }
 
 function formatPhoneForSms(contact) {
