@@ -1348,6 +1348,33 @@ button:disabled {
   gap: 14px;
 }
 
+.schedule-type-group {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.schedule-type-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(18, 51, 61, 0.96), rgba(14, 122, 113, 0.9));
+  color: white;
+}
+
+.schedule-type-header h4 {
+  margin: 0;
+  font-family: "Plus Jakarta Sans", sans-serif;
+}
+
+.schedule-type-list {
+  display: grid;
+  gap: 10px;
+}
+
 .schedule-group-summary {
   display: flex;
   justify-content: space-between;
@@ -1415,6 +1442,29 @@ button:disabled {
 .schedule-preview-chip.accent {
   background: rgba(14, 122, 113, 0.12);
   color: var(--brand-strong);
+}
+
+.schedule-type-quickbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 2px;
+}
+
+.schedule-type-pill {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(18, 51, 61, 0.06);
+  color: var(--brand-deep);
+  font-weight: 800;
+  box-shadow: none;
+}
+
+.schedule-type-pill.active {
+  background: var(--brand);
+  color: white;
+  box-shadow: 0 10px 22px rgba(14, 122, 113, 0.16);
 }
 
 .schedule-group-list {

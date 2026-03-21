@@ -1560,6 +1560,19 @@ function populateSelectOptions() {
   if ($("routeFilterType")) {
     $("routeFilterType").innerHTML = `<option value="all">All Bus Types</option>${[...routeTypes].map((type) => `<option value="${type}">${type}</option>`).join("")}`;
   }
+  if ($("scheduleTypeFilter")) {
+    const currentValue = $("scheduleTypeFilter").value || "all";
+    const sortedTypes = [...routeTypes].sort();
+    $("scheduleTypeFilter").innerHTML = `<option value="all">All Bus Types</option>${sortedTypes.map((type) => `<option value="${type}">${type}</option>`).join("")}`;
+    $("scheduleTypeFilter").value = currentValue === "all" || [...routeTypes].includes(currentValue) ? currentValue : "all";
+    if ($("scheduleTypeQuickbar")) {
+      const activeType = $("scheduleTypeFilter").value || "all";
+      $("scheduleTypeQuickbar").innerHTML = [
+        `<button type="button" class="schedule-type-pill ${activeType === "all" ? "active" : ""}" data-schedule-type="all">All</button>`,
+        ...sortedTypes.map((type) => `<button type="button" class="schedule-type-pill ${activeType === type ? "active" : ""}" data-schedule-type="${type}">${type}</button>`),
+      ].join("");
+    }
+  }
   if ($("scheduleBusFilter")) {
     const currentValue = $("scheduleBusFilter").value || "all";
     $("scheduleBusFilter").innerHTML = `<option value="all">All Buses</option>${state.db.buses.map((bus) => `<option value="${bus.id}">${bus.plateNumber} | ${bus.busType}</option>`).join("")}`;
@@ -1922,28 +1935,45 @@ function renderAdmin() {
   if (!state.db.schedules.length) {
     $("adminSchedules").innerHTML = `<div class="empty-state">No schedules yet. Add a bus and route first, then create a schedule.</div>`;
   } else {
+    const selectedTypeFilter = $("scheduleTypeFilter")?.value || "all";
     const selectedBusFilter = $("scheduleBusFilter")?.value || "all";
+    const selectedMonthFilter = $("scheduleMonthFilter")?.value || "";
+    const selectedDayFilter = $("scheduleDayFilter")?.value || "";
     const scheduleSearchQuery = String($("scheduleSearchFilter")?.value || "").trim().toLowerCase();
-    const filteredByBus = selectedBusFilter === "all"
+    const filteredByType = selectedTypeFilter === "all"
       ? state.db.schedules
-      : state.db.schedules.filter((schedule) => schedule.busId === selectedBusFilter);
+      : state.db.schedules.filter((schedule) => {
+        const bus = getBus(schedule.busId);
+        return (bus?.busType || "") === selectedTypeFilter;
+      });
+    const filteredByBus = selectedBusFilter === "all"
+      ? filteredByType
+      : filteredByType.filter((schedule) => schedule.busId === selectedBusFilter);
+    const filteredByDate = filteredByBus.filter((schedule) => {
+      if (selectedDayFilter && schedule.date !== selectedDayFilter) return false;
+      if (selectedMonthFilter && !String(schedule.date || "").startsWith(selectedMonthFilter)) return false;
+      return true;
+    });
     const visibleSchedules = scheduleSearchQuery
-      ? filteredByBus.filter((schedule) => {
+      ? filteredByDate.filter((schedule) => {
         const bus = getBus(schedule.busId);
         const route = getRoute(schedule.routeId);
         const searchText = [
           bus?.plateNumber || "",
           bus?.busType || "",
+          bus?.status || "",
           route?.origin || "",
           route?.destination || "",
           getRouteStops(route).join(" "),
           schedule.date || "",
           schedule.departureTime || "",
           schedule.arrivalTime || "",
+          schedule.driverName || "",
+          schedule.conductorName || "",
         ].join(" ").toLowerCase();
         return searchText.includes(scheduleSearchQuery);
       })
-      : filteredByBus;
+      : filteredByDate;
 
     if (!visibleSchedules.length) {
       $("adminSchedules").innerHTML = `<div class="empty-state">No schedules found for the selected filter.</div>`;
@@ -1951,77 +1981,100 @@ function renderAdmin() {
       return;
     }
 
-    const schedulesByBus = visibleSchedules.reduce((groups, schedule) => {
-      const key = schedule.busId || "unassigned";
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(schedule);
+    const schedulesByType = visibleSchedules.reduce((groups, schedule) => {
+      const bus = getBus(schedule.busId);
+      const typeKey = bus?.busType || "Unassigned";
+      if (!groups.has(typeKey)) groups.set(typeKey, []);
+      groups.get(typeKey).push(schedule);
       return groups;
     }, new Map());
 
-    const groupedMarkup = [...schedulesByBus.entries()].map(([busId, schedules]) => {
-      const bus = getBus(busId);
-      const sortedSchedules = schedules.slice().sort((a, b) => {
-        const dateCompare = String(a.date || "").localeCompare(String(b.date || ""));
-        if (dateCompare !== 0) return dateCompare;
-        return String(a.departureTime || "").localeCompare(String(b.departureTime || ""));
-      });
-      const firstSchedule = sortedSchedules[0];
-      const lastSchedule = sortedSchedules[sortedSchedules.length - 1];
-      const datePreview = firstSchedule && lastSchedule
-        ? `${formatDisplayDate(firstSchedule.date)}${firstSchedule.date !== lastSchedule.date ? ` to ${formatDisplayDate(lastSchedule.date)}` : ""}`
-        : "No dates";
-      const tripPreview = firstSchedule ? `${firstSchedule.departureTime} first trip` : "No trip time";
-      const lastTripPreview = lastSchedule ? `${lastSchedule.arrivalTime} last trip` : "No last trip";
-      const routeCount = new Set(sortedSchedules.map((schedule) => schedule.routeId).filter(Boolean)).size;
-      const busRevenue = state.db.bookings.reduce((sum, booking) => {
-        const bookingSchedule = getSchedule(booking.scheduleId);
-        if (!bookingSchedule || bookingSchedule.busId !== busId) return sum;
-        return sum + Number(booking.totalFare || 0);
-      }, 0);
+    const groupedMarkup = [...schedulesByType.entries()].sort(([typeA], [typeB]) => typeA.localeCompare(typeB)).map(([busType, typeSchedules]) => {
+      const schedulesByBus = typeSchedules.reduce((groups, schedule) => {
+        const key = schedule.busId || "unassigned";
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(schedule);
+        return groups;
+      }, new Map());
+
+      const busMarkup = [...schedulesByBus.entries()].map(([busId, schedules]) => {
+        const bus = getBus(busId);
+        const sortedSchedules = schedules.slice().sort((a, b) => {
+          const dateCompare = String(a.date || "").localeCompare(String(b.date || ""));
+          if (dateCompare !== 0) return dateCompare;
+          return String(a.departureTime || "").localeCompare(String(b.departureTime || ""));
+        });
+        const firstSchedule = sortedSchedules[0];
+        const lastSchedule = sortedSchedules[sortedSchedules.length - 1];
+        const datePreview = firstSchedule && lastSchedule
+          ? `${formatDisplayDate(firstSchedule.date)}${firstSchedule.date !== lastSchedule.date ? ` to ${formatDisplayDate(lastSchedule.date)}` : ""}`
+          : "No dates";
+        const tripPreview = firstSchedule ? `${firstSchedule.departureTime} first trip` : "No trip time";
+        const lastTripPreview = lastSchedule ? `${lastSchedule.arrivalTime} last trip` : "No last trip";
+        const routeCount = new Set(sortedSchedules.map((schedule) => schedule.routeId).filter(Boolean)).size;
+        const busRevenue = state.db.bookings.reduce((sum, booking) => {
+          const bookingSchedule = getSchedule(booking.scheduleId);
+          if (!bookingSchedule || bookingSchedule.busId !== busId) return sum;
+          return sum + Number(booking.totalFare || 0);
+        }, 0);
+
+        return `
+          <details class="admin-card schedule-bus-group" ${selectedBusFilter !== "all" ? "open" : ""}>
+            <summary class="schedule-group-summary">
+              <div>
+                <h4>${bus ? bus.plateNumber : "Unassigned bus"}</h4>
+                <p class="muted">${bus ? `${bus.busType} | ${bus.capacity} seats | ${bus.status || "Active"}` : "Schedules without an assigned bus"}</p>
+                <div class="schedule-preview-badges">
+                  <span class="schedule-preview-chip count">${sortedSchedules.length} schedule${sortedSchedules.length === 1 ? "" : "s"}</span>
+                  <span class="schedule-preview-chip date">${datePreview}</span>
+                  <span class="schedule-preview-chip trip">${tripPreview}</span>
+                  <span class="schedule-preview-chip trip">${lastTripPreview}</span>
+                  <span class="schedule-preview-chip route">${routeCount} route${routeCount === 1 ? "" : "s"}</span>
+                  <span class="schedule-preview-chip accent">${formatCurrency(busRevenue)} revenue</span>
+                </div>
+              </div>
+              <span class="pill">${sortedSchedules.length} schedule${sortedSchedules.length === 1 ? "" : "s"}</span>
+            </summary>
+            <div class="schedule-group-list">
+              ${sortedSchedules.map((schedule) => {
+                const route = getRoute(schedule.routeId);
+                return `
+                  <div class="schedule-group-item">
+                    <div class="schedule-group-main">
+                      <strong>${route ? `${route.origin} -> ${route.destination}` : "Unassigned route"}</strong>
+                      <p class="muted">${schedule.date}</p>
+                      <div class="schedule-inline-meta">
+                        <span>${schedule.departureTime} - ${schedule.arrivalTime}</span>
+                        <span>${formatCurrency(schedule.fare || 0)}</span>
+                      </div>
+                      <p class="muted">Driver: ${schedule.driverName || "Not assigned"} | Conductor: ${schedule.conductorName || "Not assigned"}</p>
+                      <p class="muted">Stop fares: ${formatScheduleStopFareSummary(schedule, route)}</p>
+                    </div>
+                    <div class="schedule-group-side">
+                      <span class="pill">${schedule.status}</span>
+                      <div class="card-actions">
+                        <button type="button" data-edit-schedule="${schedule.id}" class="edit-schedule-btn">Edit</button>
+                        <button type="button" data-delete-schedule="${schedule.id}" class="secondary-button delete-schedule-btn">Delete</button>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          </details>
+        `;
+      }).join("");
 
       return `
-        <details class="admin-card schedule-bus-group" ${selectedBusFilter !== "all" ? "open" : ""}>
-          <summary class="schedule-group-summary">
-            <div>
-              <h4>${bus ? bus.plateNumber : "Unassigned bus"}</h4>
-              <p class="muted">${bus ? `${bus.busType} | ${bus.capacity} seats` : "Schedules without an assigned bus"}</p>
-              <div class="schedule-preview-badges">
-                <span class="schedule-preview-chip count">${sortedSchedules.length} schedule${sortedSchedules.length === 1 ? "" : "s"}</span>
-                <span class="schedule-preview-chip date">${datePreview}</span>
-                <span class="schedule-preview-chip trip">${tripPreview}</span>
-                <span class="schedule-preview-chip trip">${lastTripPreview}</span>
-                <span class="schedule-preview-chip route">${routeCount} route${routeCount === 1 ? "" : "s"}</span>
-                <span class="schedule-preview-chip accent">${formatCurrency(busRevenue)} revenue</span>
-              </div>
-            </div>
-            <span class="pill">${sortedSchedules.length} schedule${sortedSchedules.length === 1 ? "" : "s"}</span>
-          </summary>
-          <div class="schedule-group-list">
-            ${sortedSchedules.map((schedule) => {
-              const route = getRoute(schedule.routeId);
-              return `
-                <div class="schedule-group-item">
-                  <div class="schedule-group-main">
-                    <strong>${route ? `${route.origin} -> ${route.destination}` : "Unassigned route"}</strong>
-                    <p class="muted">${schedule.date}</p>
-                    <div class="schedule-inline-meta">
-                      <span>${schedule.departureTime} - ${schedule.arrivalTime}</span>
-                      <span>${formatCurrency(schedule.fare || 0)}</span>
-                    </div>
-                    <p class="muted">Stop fares: ${formatScheduleStopFareSummary(schedule, route)}</p>
-                  </div>
-                  <div class="schedule-group-side">
-                    <span class="pill">${schedule.status}</span>
-                    <div class="card-actions">
-                      <button type="button" data-edit-schedule="${schedule.id}" class="edit-schedule-btn">Edit</button>
-                      <button type="button" data-delete-schedule="${schedule.id}" class="secondary-button delete-schedule-btn">Delete</button>
-                    </div>
-                  </div>
-                </div>
-              `;
-            }).join("")}
+        <section class="schedule-type-group">
+          <div class="schedule-type-header">
+            <h4>${busType}</h4>
+            <span class="pill">${typeSchedules.length} schedule${typeSchedules.length === 1 ? "" : "s"}</span>
           </div>
-        </details>
+          <div class="schedule-type-list">
+            ${busMarkup}
+          </div>
+        </section>
       `;
     }).join("");
 
@@ -2458,6 +2511,8 @@ async function saveSchedule(formData, form) {
   const fare = Number(formData.get("fare") || 0);
   const route = getRoute(routeId);
   const stopFares = parseStopFares(formData.get("stopFares"));
+  const driverName = String(formData.get("driverName") || "").trim();
+  const conductorName = String(formData.get("conductorName") || "").trim();
   const isEditing = Boolean(formData.get("scheduleId"));
   const scheduleDates = parseScheduleDates(date, additionalDatesValue, dateBatchMode, isEditing);
 
@@ -2512,6 +2567,8 @@ async function saveSchedule(formData, form) {
       arrivalTime,
       fare,
       stopFares,
+      driverName,
+      conductorName,
       status: "On Time",
     });
   });
@@ -2576,6 +2633,10 @@ function editSchedule(scheduleId) {
   if (stopFaresInput) {
     stopFaresInput.value = Object.entries(getScheduleStopFares(schedule)).map(([stop, fare]) => `${stop}:${fare}`).join(", ");
   }
+  const driverInput = form.querySelector('[name="driverName"]');
+  if (driverInput) driverInput.value = schedule.driverName || "";
+  const conductorInput = form.querySelector('[name="conductorName"]');
+  if (conductorInput) conductorInput.value = schedule.conductorName || "";
   updateScheduleFormStatus();
   renderScheduleConflictHelper();
   renderAdmin();
@@ -2649,7 +2710,7 @@ async function saveBus(formData, form) {
     plateNumber: plateNumber.toUpperCase(),
     busType,
     capacity,
-    status: "Active",
+    status: String(formData.get("status") || "Active"),
   };
 
   const existingBus = busId ? getBus(busId) : null;
@@ -2750,6 +2811,8 @@ function editBus(busId) {
   form.querySelector('[name="plateNumber"]').value = bus.plateNumber;
   form.querySelector('[name="busType"]').value = bus.busType;
   form.querySelector('[name="capacity"]').value = bus.capacity;
+  const statusInput = form.querySelector('[name="status"]');
+  if (statusInput) statusInput.value = bus.status || "Active";
   showToast("Bus loaded for editing.");
 }
 
@@ -3112,8 +3175,29 @@ function attachEvents() {
   if ($("scheduleBusFilter")) {
     $("scheduleBusFilter").addEventListener("change", renderAdmin);
   }
+  if ($("scheduleTypeFilter")) {
+    $("scheduleTypeFilter").addEventListener("change", () => {
+      if ($("scheduleBusFilter")) $("scheduleBusFilter").value = "all";
+      renderAdmin();
+    });
+  }
+  if ($("scheduleTypeQuickbar")) {
+    $("scheduleTypeQuickbar").addEventListener("click", (event) => {
+      const trigger = event.target.closest("[data-schedule-type]");
+      if (!trigger) return;
+      if ($("scheduleTypeFilter")) $("scheduleTypeFilter").value = trigger.dataset.scheduleType || "all";
+      if ($("scheduleBusFilter")) $("scheduleBusFilter").value = "all";
+      renderAdmin();
+    });
+  }
   if ($("scheduleSearchFilter")) {
     $("scheduleSearchFilter").addEventListener("input", renderAdmin);
+  }
+  if ($("scheduleMonthFilter")) {
+    $("scheduleMonthFilter").addEventListener("change", renderAdmin);
+  }
+  if ($("scheduleDayFilter")) {
+    $("scheduleDayFilter").addEventListener("change", renderAdmin);
   }
   if ($("clearSchedulesBtn")) {
     $("clearSchedulesBtn").addEventListener("click", () => {

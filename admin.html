@@ -150,6 +150,14 @@
                     Stop Fares
                     <input name="stopFares" placeholder="Example: Mandaue:80, Consolacion:140" />
                   </label>
+                  <label>
+                    Driver
+                    <input name="driverName" placeholder="Assigned driver" />
+                  </label>
+                  <label>
+                    Conductor
+                    <input name="conductorName" placeholder="Assigned conductor" />
+                  </label>
                   <button type="submit">Save Schedule</button>
                   <button type="button" id="resetScheduleFormBtn" class="secondary-button">New Schedule</button>
                   <button type="button" id="clearSchedulesBtn" class="secondary-button">Delete All Schedules</button>
@@ -159,10 +167,16 @@
                 </div>
                 <div class="toolbar">
                   <input id="scheduleSearchFilter" placeholder="Search bus, route, date, or time" />
+                  <select id="scheduleTypeFilter">
+                    <option value="all">All Bus Types</option>
+                  </select>
                   <select id="scheduleBusFilter">
                     <option value="all">All Buses</option>
                   </select>
+                  <input id="scheduleMonthFilter" type="month" />
+                  <input id="scheduleDayFilter" type="date" />
                 </div>
+                <div class="schedule-type-quickbar" id="scheduleTypeQuickbar"></div>
                 <div id="adminSchedules" class="admin-list"></div>
               </div>
 
@@ -207,6 +221,14 @@
                   <label>
                     Capacity
                     <input name="capacity" type="number" min="10" max="60" required />
+                  </label>
+                  <label>
+                    Availability
+                    <select name="status">
+                      <option value="Active">Active</option>
+                      <option value="Under Maintenance">Under Maintenance</option>
+                      <option value="Unavailable">Unavailable</option>
+                    </select>
                   </label>
                   <button type="submit">Save Bus</button>
                 </form>
