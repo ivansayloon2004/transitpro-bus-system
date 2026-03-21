@@ -63,6 +63,7 @@ function defaultState() {
     bookings: [],
     tickets: [],
     auditLogs: [],
+    feedbacks: [],
   };
 }
 

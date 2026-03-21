@@ -47,6 +47,7 @@
         <button class="nav-link admin-panel-link" data-admin-panel="adminManifestPanel" type="button">Manifest</button>
         <button class="nav-link admin-panel-link" data-admin-panel="adminLookupPanel" type="button">Lookup</button>
         <button class="nav-link admin-panel-link" data-admin-panel="adminBookingsPanel" type="button">Bookings</button>
+        <button class="nav-link admin-panel-link" data-admin-panel="adminFeedbackPanel" type="button">Feedback</button>
         <button class="nav-link admin-panel-link" data-admin-panel="adminAuditPanel" type="button">Audit Log</button>
         <a class="nav-link nav-link-anchor" href="index.html">Back To Index</a>
       </nav>
@@ -343,6 +344,18 @@
                   <button type="submit">Save Rebooking</button>
                 </form>
                 <div id="adminBookings" class="admin-list"></div>
+              </div>
+
+              <div class="panel ops-panel" id="adminFeedbackPanel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Passenger Feedback</p>
+                    <h3>Complaints and Suggestions</h3>
+                  </div>
+                </div>
+                <div id="adminFeedbackList" class="admin-list empty-state">
+                  Passenger feedback will appear here after submissions are sent.
+                </div>
               </div>
 
               <div class="panel ops-panel" id="adminAuditPanel">

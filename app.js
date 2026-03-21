@@ -1,6 +1,6 @@
 const SESSION_KEY = "transitpro-session-v1";
 const DB_NAME = "transitpro-browser-db-clean";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const STORE_NAMES = [
   "meta",
   "passengers",
@@ -15,6 +15,7 @@ const STORE_NAMES = [
   "auditLogs",
   "staff",
   "scheduleTemplates",
+  "feedbacks",
 ];
 
 const state = {
@@ -31,6 +32,7 @@ const state = {
     auditLogs: [],
     staff: [],
     scheduleTemplates: [],
+    feedbacks: [],
   },
   session: loadSession(),
   bookingSearch: null,
@@ -154,7 +156,7 @@ async function getAllFromStore(storeName) {
 
 async function loadAppData() {
   await ensureSeedData();
-  const [passengers, admins, buses, routes, schedules, seats, seatStates, bookings, tickets, auditLogs, staff, scheduleTemplates] = await Promise.all([
+  const [passengers, admins, buses, routes, schedules, seats, seatStates, bookings, tickets, auditLogs, staff, scheduleTemplates, feedbacks] = await Promise.all([
     getAllFromStore("passengers"),
     getAllFromStore("admins"),
     getAllFromStore("buses"),
@@ -167,6 +169,7 @@ async function loadAppData() {
     getAllFromStore("auditLogs"),
     getAllFromStore("staff"),
     getAllFromStore("scheduleTemplates"),
+    getAllFromStore("feedbacks"),
   ]);
 
   state.db = {
@@ -182,6 +185,7 @@ async function loadAppData() {
     auditLogs: auditLogs.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     staff: staff.sort((a, b) => `${a.role}${a.name}`.localeCompare(`${b.role}${b.name}`)),
     scheduleTemplates: scheduleTemplates.sort((a, b) => a.name.localeCompare(b.name)),
+    feedbacks: feedbacks.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
   };
 }
 
@@ -384,6 +388,10 @@ function formatCurrency(value) {
     currency: "PHP",
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function normalizeContactNumber(value) {
+  return String(value || "").replace(/\s+/g, "");
 }
 
 function formatDuration(route) {
@@ -1949,6 +1957,93 @@ function renderHistory() {
   }).join("");
 }
 
+function renderFeedback() {
+  const feedbackList = $("feedbackList");
+  if (!feedbackList) return;
+
+  if (!state.session || state.session.role !== "user") {
+    feedbackList.className = "admin-list empty-state";
+    feedbackList.textContent = "Log in as a passenger to send and view feedback.";
+    return;
+  }
+
+  const items = state.db.feedbacks
+    .filter((feedback) => feedback.userId === state.session.id || normalizeContactNumber(feedback.contact) === normalizeContactNumber(state.db.passengers.find((item) => item.id === state.session.id)?.contact))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  if (!items.length) {
+    feedbackList.className = "admin-list empty-state";
+    feedbackList.textContent = "No feedback submitted yet.";
+    return;
+  }
+
+  feedbackList.className = "admin-list";
+  feedbackList.innerHTML = items.map((feedback) => `
+    <article class="admin-card">
+      <div class="admin-card-head">
+        <div>
+          <h4>${escapeHtml(feedback.type)}</h4>
+          <p class="muted">${escapeHtml(feedback.category)} | ${escapeHtml(formatDisplayDateTime(feedback.createdAt))}</p>
+        </div>
+        <span class="pill ${feedback.status === "Resolved" ? "ok" : feedback.status === "Reviewed" ? "warn" : ""}">${escapeHtml(feedback.status || "New")}</span>
+      </div>
+      <p class="muted">${escapeHtml(feedback.message)}</p>
+      <p class="muted">Contact: ${escapeHtml(feedback.contact)}</p>
+    </article>
+  `).join("");
+}
+
+async function saveFeedback(formData, form) {
+  if (!state.session || state.session.role !== "user") {
+    throw new Error("Passenger login is required to send feedback.");
+  }
+
+  const feedback = {
+    id: uid(),
+    userId: state.session.id,
+    name: String(formData.get("name") || "").trim(),
+    contact: normalizeContactNumber(formData.get("contact")),
+    type: String(formData.get("type") || "Suggestion"),
+    category: String(formData.get("category") || "General"),
+    message: String(formData.get("message") || "").trim(),
+    status: "New",
+    createdAt: new Date().toISOString(),
+  };
+
+  if (!feedback.name || !feedback.contact || !feedback.message) {
+    throw new Error("Name, contact number, and message are required.");
+  }
+
+  const db = await openDatabase();
+  const transaction = db.transaction("feedbacks", "readwrite");
+  transaction.objectStore("feedbacks").add(feedback);
+  await transactionDone(transaction);
+  await finalizeMutation("feedback-submitted");
+  if (form) form.reset();
+  hydratePassengerForm();
+  showToast("Your feedback has been sent to the admin.");
+}
+
+async function updateFeedbackStatus(feedbackId, status) {
+  const feedback = state.db.feedbacks.find((item) => item.id === feedbackId);
+  if (!feedback) {
+    throw new Error("Feedback not found.");
+  }
+
+  const db = await openDatabase();
+  const transaction = db.transaction("feedbacks", "readwrite");
+  transaction.objectStore("feedbacks").put({
+    ...feedback,
+    status,
+    reviewedAt: new Date().toISOString(),
+    reviewedBy: state.session?.name || "Admin",
+  });
+  await transactionDone(transaction);
+  await logAuditAction("Feedback Updated", `${feedback.name} feedback marked as ${status}`);
+  await finalizeMutation("feedback-status");
+  showToast(`Feedback marked as ${status}.`);
+}
+
 function renderAdmin() {
   const metrics = $("adminMetrics");
   if (!metrics) return;
@@ -2317,6 +2412,29 @@ function renderAdmin() {
       `;
     }).join("") : `<div class="empty-state">No bookings yet.</div>`;
 
+  if ($("adminFeedbackList")) {
+    $("adminFeedbackList").className = state.db.feedbacks.length ? "admin-list" : "admin-list empty-state";
+    $("adminFeedbackList").innerHTML = state.db.feedbacks.length
+      ? state.db.feedbacks.map((feedback) => `
+        <article class="admin-card">
+          <div class="admin-card-head">
+            <div>
+              <h4>${escapeHtml(feedback.name)}</h4>
+              <p class="muted">${escapeHtml(feedback.type)} | ${escapeHtml(feedback.category)} | ${escapeHtml(formatDisplayDateTime(feedback.createdAt))}</p>
+            </div>
+            <span class="pill ${feedback.status === "Resolved" ? "ok" : feedback.status === "Reviewed" ? "warn" : ""}">${escapeHtml(feedback.status || "New")}</span>
+          </div>
+          <p class="muted">Contact: ${escapeHtml(feedback.contact)}</p>
+          <p class="muted">${escapeHtml(feedback.message)}</p>
+          <div class="card-actions">
+            <button type="button" data-feedback-status="${feedback.id}:Reviewed" ${feedback.status === "Reviewed" ? "disabled" : ""}>Mark Reviewed</button>
+            <button type="button" data-feedback-status="${feedback.id}:Resolved" ${feedback.status === "Resolved" ? "disabled" : ""}>Mark Resolved</button>
+          </div>
+        </article>
+      `).join("")
+      : "Passenger feedback will appear here after submissions are sent.";
+  }
+
   if ($("adminAuditLog")) {
     $("adminAuditLog").className = state.db.auditLogs.length ? "admin-list" : "admin-list empty-state";
     $("adminAuditLog").innerHTML = state.db.auditLogs.length
@@ -2386,14 +2504,23 @@ function renderAdminSeatMap() {
 
 function hydratePassengerForm() {
   const bookingForm = $("bookingForm");
-  if (!bookingForm) return;
-  const passengerNameInput = bookingForm.querySelector('[name="passengerName"]');
-  const contactInput = bookingForm.querySelector('[name="contactNumber"]');
+  const feedbackForm = $("feedbackForm");
+  if (!bookingForm && !feedbackForm) return;
   if (state.session && state.session.role === "user") {
     const passenger = state.db.passengers.find((item) => item.id === state.session.id);
     if (passenger) {
-      passengerNameInput.value = passenger.name;
-      contactInput.value = passenger.contact;
+      if (bookingForm) {
+        const passengerNameInput = bookingForm.querySelector('[name="passengerName"]');
+        const contactInput = bookingForm.querySelector('[name="contactNumber"]');
+        if (passengerNameInput) passengerNameInput.value = passenger.name;
+        if (contactInput) contactInput.value = passenger.contact;
+      }
+      if (feedbackForm) {
+        const feedbackNameInput = feedbackForm.querySelector('[name="name"]');
+        const feedbackContactInput = feedbackForm.querySelector('[name="contact"]');
+        if (feedbackNameInput) feedbackNameInput.value = passenger.name;
+        if (feedbackContactInput) feedbackContactInput.value = passenger.contact;
+      }
     }
   }
 }
@@ -2410,6 +2537,7 @@ function refreshUi() {
   renderSeatMap();
   renderBookingSummary();
   renderHistory();
+  renderFeedback();
   renderAdmin();
   renderManifest();
   renderTicketLookup();
@@ -3476,6 +3604,12 @@ function attachEvents() {
       }
     });
   }
+  if ($("feedbackForm")) {
+    $("feedbackForm").addEventListener("submit", (event) => {
+      event.preventDefault();
+      saveFeedback(new FormData(event.currentTarget), event.currentTarget).catch((error) => showToast(error.message));
+    });
+  }
   if ($("manifestScheduleSelect")) {
     $("manifestScheduleSelect").addEventListener("change", (event) => {
       state.selectedManifestScheduleId = event.target.value;
@@ -3707,6 +3841,15 @@ function attachEvents() {
       if (boardingTrigger) {
         const [bookingId, status] = boardingTrigger.dataset.boardingStatus.split(":");
         updateBoardingStatus(bookingId, status).catch((error) => showToast(error.message));
+      }
+    });
+  }
+  if ($("adminFeedbackList")) {
+    $("adminFeedbackList").addEventListener("click", (event) => {
+      const trigger = event.target.closest("[data-feedback-status]");
+      if (trigger) {
+        const [feedbackId, status] = trigger.dataset.feedbackStatus.split(":");
+        updateFeedbackStatus(feedbackId, status).catch((error) => showToast(error.message));
       }
     });
   }
