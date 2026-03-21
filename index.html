@@ -268,14 +268,25 @@
                     <input name="stopFares" placeholder="Example: Mandaue:80, Consolacion:140" />
                   </label>
                   <label>
+                    Template
+                    <select name="templateId" id="scheduleTemplateSelect">
+                      <option value="">No template</option>
+                    </select>
+                  </label>
+                  <label>
                     Driver
-                    <input name="driverName" placeholder="Assigned driver" />
+                    <select name="driverName" id="driverSelect">
+                      <option value="">Select driver</option>
+                    </select>
                   </label>
                   <label>
                     Conductor
-                    <input name="conductorName" placeholder="Assigned conductor" />
+                    <select name="conductorName" id="conductorSelect">
+                      <option value="">Select conductor</option>
+                    </select>
                   </label>
                   <button type="submit">Save Schedule</button>
+                  <button type="button" id="saveTemplateBtn" class="secondary-button">Save As Template</button>
                   <button type="button" id="resetScheduleFormBtn" class="secondary-button">New Schedule</button>
                   <button type="button" id="clearSchedulesBtn" class="secondary-button">Delete All Schedules</button>
                 </form>
@@ -345,6 +356,22 @@
                     </select>
                   </label>
                   <button type="submit">Save Bus</button>
+                </form>
+
+                <form id="staffForm" class="booking-form compact-form">
+                  <input type="hidden" name="staffId" />
+                  <label>
+                    Staff Name
+                    <input name="name" required />
+                  </label>
+                  <label>
+                    Role
+                    <select name="role">
+                      <option value="Driver">Driver</option>
+                      <option value="Conductor">Conductor</option>
+                    </select>
+                  </label>
+                  <button type="submit">Save Staff</button>
                 </form>
 
                 <form id="routeForm" class="booking-form compact-form">

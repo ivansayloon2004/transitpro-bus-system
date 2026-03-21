@@ -13,6 +13,8 @@ const STORE_NAMES = [
   "bookings",
   "tickets",
   "auditLogs",
+  "staff",
+  "scheduleTemplates",
 ];
 
 const state = {
@@ -27,6 +29,8 @@ const state = {
     bookings: [],
     tickets: [],
     auditLogs: [],
+    staff: [],
+    scheduleTemplates: [],
   },
   session: loadSession(),
   bookingSearch: null,
@@ -142,7 +146,7 @@ async function getAllFromStore(storeName) {
 
 async function loadAppData() {
   await ensureSeedData();
-  const [passengers, admins, buses, routes, schedules, seats, seatStates, bookings, tickets, auditLogs] = await Promise.all([
+  const [passengers, admins, buses, routes, schedules, seats, seatStates, bookings, tickets, auditLogs, staff, scheduleTemplates] = await Promise.all([
     getAllFromStore("passengers"),
     getAllFromStore("admins"),
     getAllFromStore("buses"),
@@ -153,6 +157,8 @@ async function loadAppData() {
     getAllFromStore("bookings"),
     getAllFromStore("tickets"),
     getAllFromStore("auditLogs"),
+    getAllFromStore("staff"),
+    getAllFromStore("scheduleTemplates"),
   ]);
 
   state.db = {
@@ -166,6 +172,8 @@ async function loadAppData() {
     bookings: bookings.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     tickets: tickets.sort((a, b) => b.issuedAt.localeCompare(a.issuedAt)),
     auditLogs: auditLogs.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    staff: staff.sort((a, b) => `${a.role}${a.name}`.localeCompare(`${b.role}${b.name}`)),
+    scheduleTemplates: scheduleTemplates.sort((a, b) => a.name.localeCompare(b.name)),
   };
 }
 
@@ -859,6 +867,10 @@ function getRoute(routeId) {
 
 function getBus(busId) {
   return state.db.buses.find((bus) => bus.id === busId);
+}
+
+function getTemplate(templateId) {
+  return state.db.scheduleTemplates.find((template) => template.id === templateId);
 }
 
 function getRouteBusTypes(routeId) {
@@ -1578,6 +1590,23 @@ function populateSelectOptions() {
     $("scheduleBusFilter").innerHTML = `<option value="all">All Buses</option>${state.db.buses.map((bus) => `<option value="${bus.id}">${bus.plateNumber} | ${bus.busType}</option>`).join("")}`;
     $("scheduleBusFilter").value = state.db.buses.some((bus) => bus.id === currentValue) ? currentValue : "all";
   }
+  if ($("driverSelect")) {
+    const currentValue = $("driverSelect").value || "";
+    const drivers = state.db.staff.filter((staff) => staff.role === "Driver");
+    $("driverSelect").innerHTML = `<option value="">Select driver</option>${drivers.map((staff) => `<option value="${staff.name}">${staff.name}</option>`).join("")}`;
+    $("driverSelect").value = drivers.some((staff) => staff.name === currentValue) ? currentValue : "";
+  }
+  if ($("conductorSelect")) {
+    const currentValue = $("conductorSelect").value || "";
+    const conductors = state.db.staff.filter((staff) => staff.role === "Conductor");
+    $("conductorSelect").innerHTML = `<option value="">Select conductor</option>${conductors.map((staff) => `<option value="${staff.name}">${staff.name}</option>`).join("")}`;
+    $("conductorSelect").value = conductors.some((staff) => staff.name === currentValue) ? currentValue : "";
+  }
+  if ($("scheduleTemplateSelect")) {
+    const currentValue = $("scheduleTemplateSelect").value || "";
+    $("scheduleTemplateSelect").innerHTML = `<option value="">No template</option>${state.db.scheduleTemplates.map((template) => `<option value="${template.id}">${template.name}</option>`).join("")}`;
+    $("scheduleTemplateSelect").value = state.db.scheduleTemplates.some((template) => template.id === currentValue) ? currentValue : "";
+  }
     if ($("originSelect")) {
       $("originSelect").innerHTML = `<option value="">Choose origin</option>${[...origins].map((origin) => `<option value="${origin}">${origin}</option>`).join("")}`;
     }
@@ -2035,6 +2064,11 @@ function renderAdmin() {
               </div>
               <span class="pill">${sortedSchedules.length} schedule${sortedSchedules.length === 1 ? "" : "s"}</span>
             </summary>
+            <div class="schedule-group-actions">
+              <button type="button" class="secondary-button" data-delete-bus-schedules="${busId}">
+                Delete All Schedules For This Bus
+              </button>
+            </div>
             <div class="schedule-group-list">
               ${sortedSchedules.map((schedule) => {
                 const route = getRoute(schedule.routeId);
@@ -2083,8 +2117,7 @@ function renderAdmin() {
 
   renderAdminSeatMap();
 
-  const resourceCards = [
-    ...state.db.buses.map((bus) => `
+  const busCards = state.db.buses.map((bus) => `
       <article class="admin-card">
         <div class="admin-card-head">
           <div><h4>${bus.plateNumber}</h4><p class="muted">${bus.busType}</p></div>
@@ -2095,8 +2128,8 @@ function renderAdmin() {
           <button type="button" data-delete-bus="${bus.id}" class="secondary-button">Delete</button>
         </div>
       </article>
-    `),
-    ...state.db.routes.map((route) => `
+    `);
+  const routeCards = state.db.routes.map((route) => `
       <article class="admin-card">
         <div class="admin-card-head">
           <div><h4>${route.origin} -> ${route.destination}</h4><p class="muted">${route.distanceKm} km | ${formatDuration(route)}</p>${getRouteStops(route).length ? `<p class="muted">Via: ${getRouteStops(route).join(", ")}</p>` : ""}</div>
@@ -2108,10 +2141,58 @@ function renderAdmin() {
           <button type="button" data-delete-route="${route.id}" class="secondary-button">Delete</button>
         </div>
       </article>
-    `),
+    `);
+  const staffCards = state.db.staff.map((staff) => `
+      <article class="admin-card">
+        <div class="admin-card-head">
+          <div><h4>${staff.name}</h4><p class="muted">${staff.role}</p></div>
+          <span class="pill">${staff.role}</span>
+        </div>
+        <div class="card-actions">
+          <button type="button" data-edit-staff="${staff.id}">Edit Staff</button>
+          <button type="button" data-delete-staff="${staff.id}" class="secondary-button">Delete</button>
+        </div>
+      </article>
+    `);
+  const templateCards = state.db.scheduleTemplates.map((template) => {
+      const route = getRoute(template.routeId);
+      const bus = getBus(template.busId);
+      return `
+        <article class="admin-card">
+          <div class="admin-card-head">
+            <div><h4>${template.name}</h4><p class="muted">${route ? `${route.origin} -> ${route.destination}` : "No route"} | ${bus ? bus.plateNumber : "No bus"}</p></div>
+            <span class="pill">Template</span>
+          </div>
+          <p class="muted">${template.departureTime || "--:--"} - ${template.arrivalTime || "--:--"} | ${formatCurrency(template.fare || 0)}</p>
+          <div class="card-actions">
+            <button type="button" data-apply-template="${template.id}">Apply Template</button>
+            <button type="button" data-delete-template="${template.id}" class="secondary-button">Delete</button>
+          </div>
+        </article>
+      `;
+    });
+
+  const buildResourceSection = (title, items, emptyText) => `
+    <section class="resource-section">
+      <div class="resource-section-head">
+        <h4>${title}</h4>
+        <span class="pill">${items.length}</span>
+      </div>
+      <div class="resource-section-grid">
+        ${items.length ? items.join("") : `<div class="empty-state">${emptyText}</div>`}
+      </div>
+    </section>
+  `;
+
+  const resourceMarkup = [
+    buildResourceSection("Buses", busCards, "No buses yet."),
+    buildResourceSection("Routes", routeCards, "No routes yet."),
+    buildResourceSection("Staff", staffCards, "No staff records yet."),
+    buildResourceSection("Templates", templateCards, "No schedule templates yet."),
   ];
-  $("adminResources").innerHTML = resourceCards.length
-    ? resourceCards.join("")
+
+  $("adminResources").innerHTML = resourceMarkup.length
+    ? resourceMarkup.join("")
     : `<div class="empty-state">No buses or routes yet. Add your first records here.</div>`;
 
   $("adminBookings").innerHTML = state.db.bookings.length ? [...state.db.bookings]
@@ -2510,6 +2591,7 @@ async function saveSchedule(formData, form) {
   const arrivalTime = formData.get("arrivalTime");
   const fare = Number(formData.get("fare") || 0);
   const route = getRoute(routeId);
+  const bus = getBus(busId);
   const stopFares = parseStopFares(formData.get("stopFares"));
   const driverName = String(formData.get("driverName") || "").trim();
   const conductorName = String(formData.get("conductorName") || "").trim();
@@ -2524,6 +2606,12 @@ async function saveSchedule(formData, form) {
   }
   if (!route) {
     throw new Error("Choose a valid route for this schedule.");
+  }
+  if (!bus) {
+    throw new Error("Choose a valid bus for this schedule.");
+  }
+  if (bus.status === "Under Maintenance" || bus.status === "Unavailable") {
+    throw new Error(`This bus is ${bus.status.toLowerCase()} and cannot be scheduled.`);
   }
   Object.keys(stopFares).forEach((stop) => {
     if (!getRouteStops(route).includes(stop)) {
@@ -2637,6 +2725,8 @@ function editSchedule(scheduleId) {
   if (driverInput) driverInput.value = schedule.driverName || "";
   const conductorInput = form.querySelector('[name="conductorName"]');
   if (conductorInput) conductorInput.value = schedule.conductorName || "";
+  const templateInput = form.querySelector('[name="templateId"]');
+  if (templateInput) templateInput.value = "";
   updateScheduleFormStatus();
   renderScheduleConflictHelper();
   renderAdmin();
@@ -2695,6 +2785,48 @@ async function deleteAllSchedules() {
   showToast(`Deleted ${schedules.length} schedules.`);
 }
 
+async function deleteSchedulesByBus(busId) {
+  if (!state.session || state.session.role !== "admin") {
+    throw new Error("Admin access is required.");
+  }
+
+  const targetSchedules = state.db.schedules.filter((schedule) => schedule.busId === busId);
+  if (!targetSchedules.length) {
+    showToast("There are no schedules for this bus.");
+    return;
+  }
+
+  const targetScheduleIds = new Set(targetSchedules.map((schedule) => schedule.id));
+  const bus = getBus(busId);
+  const db = await openDatabase();
+  const transaction = db.transaction(["schedules", "seatStates"], "readwrite");
+  const schedulesStore = transaction.objectStore("schedules");
+  const seatStatesStore = transaction.objectStore("seatStates");
+  const seatStates = await requestToPromise(seatStatesStore.getAll());
+
+  targetSchedules.forEach((schedule) => schedulesStore.delete(schedule.id));
+  seatStates
+    .filter((seatState) => targetScheduleIds.has(seatState.scheduleId))
+    .forEach((seatState) => seatStatesStore.delete(seatState.id));
+
+  await transactionDone(transaction);
+  await logAuditAction(
+    "Bus Schedules Cleared",
+    `${bus ? bus.plateNumber : busId} | Deleted ${targetSchedules.length} schedules and related seat holds.`
+  );
+
+  if (targetScheduleIds.has(state.selectedAdminScheduleId)) {
+    state.selectedAdminScheduleId = null;
+  }
+  if (targetScheduleIds.has(state.selectedManifestScheduleId)) {
+    state.selectedManifestScheduleId = null;
+  }
+
+  await finalizeMutation("delete-bus-schedules");
+  if ($("scheduleBusFilter")) $("scheduleBusFilter").value = busId || "all";
+  showToast(`Deleted ${targetSchedules.length} schedules for ${bus ? bus.plateNumber : "the selected bus"}.`);
+}
+
 async function saveBus(formData, form) {
   const busId = formData.get("busId");
   const plateNumber = getRequiredFormValue(formData, "plateNumber", "Plate number");
@@ -2750,6 +2882,106 @@ async function saveBus(formData, form) {
   await finalizeMutation("save-bus");
   if (form) form.reset();
   showToast(busId ? "Bus updated." : "Bus added to fleet.");
+}
+
+async function saveStaff(formData, form) {
+  const staffId = formData.get("staffId");
+  const name = getRequiredFormValue(formData, "name", "Staff name");
+  const role = getRequiredFormValue(formData, "role", "Staff role");
+  const db = await openDatabase();
+  const transaction = db.transaction("staff", "readwrite");
+  transaction.objectStore("staff").put({
+    id: staffId || uid(),
+    name,
+    role,
+    createdAt: new Date().toISOString(),
+  });
+  await transactionDone(transaction);
+  await finalizeMutation("save-staff");
+  if (form) form.reset();
+  showToast(`${role} saved.`);
+}
+
+function editStaff(staffId) {
+  const staff = state.db.staff.find((item) => item.id === staffId);
+  const form = $("staffForm");
+  if (!staff || !form) return;
+  form.querySelector('[name="staffId"]').value = staff.id;
+  form.querySelector('[name="name"]').value = staff.name;
+  form.querySelector('[name="role"]').value = staff.role;
+  showToast("Staff loaded for editing.");
+}
+
+async function deleteStaff(staffId) {
+  const staff = state.db.staff.find((item) => item.id === staffId);
+  if (!staff) return;
+  const db = await openDatabase();
+  const transaction = db.transaction("staff", "readwrite");
+  transaction.objectStore("staff").delete(staffId);
+  await transactionDone(transaction);
+  await finalizeMutation("delete-staff");
+  showToast("Staff deleted.");
+}
+
+async function saveScheduleTemplate() {
+  const form = $("scheduleForm");
+  if (!form) return;
+  const formData = new FormData(form);
+  const routeId = formData.get("routeId");
+  const busId = formData.get("busId");
+  if (!routeId || !busId) {
+    throw new Error("Choose a route and bus before saving a template.");
+  }
+  const bus = getBus(busId);
+  const route = getRoute(routeId);
+  const db = await openDatabase();
+  const transaction = db.transaction("scheduleTemplates", "readwrite");
+  transaction.objectStore("scheduleTemplates").put({
+    id: uid(),
+    name: `${bus ? bus.plateNumber : "Bus"} | ${route ? `${route.origin} -> ${route.destination}` : "Route"}`,
+    routeId,
+    busId,
+    departureTime: formData.get("departureTime"),
+    arrivalTime: formData.get("arrivalTime"),
+    fare: Number(formData.get("fare") || 0),
+    stopFares: parseStopFares(formData.get("stopFares")),
+    driverName: String(formData.get("driverName") || "").trim(),
+    conductorName: String(formData.get("conductorName") || "").trim(),
+    createdAt: new Date().toISOString(),
+  });
+  await transactionDone(transaction);
+  await finalizeMutation("save-template");
+  showToast("Schedule template saved.");
+}
+
+async function deleteScheduleTemplate(templateId) {
+  const db = await openDatabase();
+  const transaction = db.transaction("scheduleTemplates", "readwrite");
+  transaction.objectStore("scheduleTemplates").delete(templateId);
+  await transactionDone(transaction);
+  await finalizeMutation("delete-template");
+  showToast("Template deleted.");
+}
+
+function applyScheduleTemplate(templateId) {
+  const template = getTemplate(templateId);
+  const form = $("scheduleForm");
+  if (!template || !form) return;
+  form.querySelector('[name="routeId"]').value = template.routeId || "";
+  form.querySelector('[name="busId"]').value = template.busId || "";
+  form.querySelector('[name="departureTime"]').value = template.departureTime || "";
+  form.querySelector('[name="arrivalTime"]').value = template.arrivalTime || "";
+  form.querySelector('[name="fare"]').value = template.fare ?? 0;
+  const stopFaresInput = form.querySelector('[name="stopFares"]');
+  if (stopFaresInput) {
+    stopFaresInput.value = Object.entries(template.stopFares || {}).map(([stop, fare]) => `${stop}:${fare}`).join(", ");
+  }
+  const driverInput = form.querySelector('[name="driverName"]');
+  if (driverInput) driverInput.value = template.driverName || "";
+  const conductorInput = form.querySelector('[name="conductorName"]');
+  if (conductorInput) conductorInput.value = template.conductorName || "";
+  renderScheduleConflictHelper();
+  showToast("Schedule template applied.");
 }
 
 async function saveRoute(formData, form) {
@@ -3172,6 +3404,16 @@ function attachEvents() {
   if ($("resetScheduleFormBtn")) {
     $("resetScheduleFormBtn").addEventListener("click", resetScheduleForm);
   }
+  if ($("saveTemplateBtn")) {
+    $("saveTemplateBtn").addEventListener("click", () => {
+      saveScheduleTemplate().catch((error) => showToast(error.message));
+    });
+  }
+  if ($("scheduleTemplateSelect")) {
+    $("scheduleTemplateSelect").addEventListener("change", (event) => {
+      applyScheduleTemplate(event.target.value);
+    });
+  }
   if ($("scheduleBusFilter")) {
     $("scheduleBusFilter").addEventListener("change", renderAdmin);
   }
@@ -3209,8 +3451,12 @@ function attachEvents() {
     $("adminSchedules").addEventListener("click", (event) => {
       const edit = event.target.closest(".edit-schedule-btn");
       const remove = event.target.closest(".delete-schedule-btn");
+      const removeBusSchedules = event.target.closest("[data-delete-bus-schedules]");
       if (edit) editSchedule(edit.dataset.editSchedule);
       if (remove) deleteSchedule(remove.dataset.deleteSchedule).catch((error) => showToast(error.message));
+      if (removeBusSchedules) {
+        deleteSchedulesByBus(removeBusSchedules.dataset.deleteBusSchedules).catch((error) => showToast(error.message));
+      }
     });
   }
 
@@ -3234,6 +3480,12 @@ function attachEvents() {
       saveBus(new FormData(event.currentTarget), event.currentTarget).catch((error) => showToast(error.message));
     });
   }
+  if ($("staffForm")) {
+    $("staffForm").addEventListener("submit", (event) => {
+      event.preventDefault();
+      saveStaff(new FormData(event.currentTarget), event.currentTarget).catch((error) => showToast(error.message));
+    });
+  }
   if ($("routeForm")) {
     $("routeForm").addEventListener("submit", (event) => {
       event.preventDefault();
@@ -3247,11 +3499,19 @@ function attachEvents() {
       const deleteBusTrigger = event.target.closest("[data-delete-bus]");
       const editRouteTrigger = event.target.closest("[data-edit-route]");
       const deleteRouteTrigger = event.target.closest("[data-delete-route]");
+      const editStaffTrigger = event.target.closest("[data-edit-staff]");
+      const deleteStaffTrigger = event.target.closest("[data-delete-staff]");
+      const applyTemplateTrigger = event.target.closest("[data-apply-template]");
+      const deleteTemplateTrigger = event.target.closest("[data-delete-template]");
 
       if (editBusTrigger) editBus(editBusTrigger.dataset.editBus);
       if (deleteBusTrigger) deleteBus(deleteBusTrigger.dataset.deleteBus).catch((error) => showToast(error.message));
       if (editRouteTrigger) editRoute(editRouteTrigger.dataset.editRoute);
       if (deleteRouteTrigger) deleteRoute(deleteRouteTrigger.dataset.deleteRoute).catch((error) => showToast(error.message));
+      if (editStaffTrigger) editStaff(editStaffTrigger.dataset.editStaff);
+      if (deleteStaffTrigger) deleteStaff(deleteStaffTrigger.dataset.deleteStaff).catch((error) => showToast(error.message));
+      if (applyTemplateTrigger) applyScheduleTemplate(applyTemplateTrigger.dataset.applyTemplate);
+      if (deleteTemplateTrigger) deleteScheduleTemplate(deleteTemplateTrigger.dataset.deleteTemplate).catch((error) => showToast(error.message));
     });
   }
 

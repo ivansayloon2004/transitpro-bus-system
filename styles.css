@@ -1375,6 +1375,29 @@ button:disabled {
   gap: 10px;
 }
 
+.resource-section {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.resource-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.resource-section-head h4 {
+  margin: 0;
+  font-family: "Plus Jakarta Sans", sans-serif;
+}
+
+.resource-section-grid {
+  display: grid;
+  gap: 10px;
+}
+
 .schedule-group-summary {
   display: flex;
   justify-content: space-between;
@@ -1470,6 +1493,12 @@ button:disabled {
 .schedule-group-list {
   display: grid;
   gap: 8px;
+}
+
+.schedule-group-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -2px;
 }
 
 .schedule-group-item {
