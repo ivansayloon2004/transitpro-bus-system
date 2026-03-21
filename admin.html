@@ -115,16 +115,23 @@
                     Travel Date
                     <input type="date" name="date" required />
                   </label>
-                  <label>
+                  <label class="creation-only-field" id="additionalDatesField">
                     Additional Dates
                     <input name="additionalDates" placeholder="Example: 2026-03-25, 2026-03-27" />
                   </label>
-                  <label>
+                  <label class="creation-only-field" id="dateBatchModeField">
                     Monthly Batch
                     <select name="dateBatchMode">
                       <option value="single">Only selected date</option>
                       <option value="restOfMonth">Create every day until month end</option>
                       <option value="fullMonth">Create every day of the selected month</option>
+                    </select>
+                  </label>
+                  <label class="editing-only-field" id="editScopeField">
+                    Edit Scope
+                    <select name="editScope">
+                      <option value="single">Only this schedule</option>
+                      <option value="busMonth">This bus for the selected month</option>
                     </select>
                   </label>
                   <label>
@@ -151,6 +158,7 @@
                   Select a bus and date to preview that bus's schedules.
                 </div>
                 <div class="toolbar">
+                  <input id="scheduleSearchFilter" placeholder="Search bus, route, date, or time" />
                   <select id="scheduleBusFilter">
                     <option value="all">All Buses</option>
                   </select>

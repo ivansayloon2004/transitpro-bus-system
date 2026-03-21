@@ -1492,8 +1492,20 @@ function updateScheduleFormStatus() {
 
   const scheduleIdInput = form.querySelector('[name="scheduleId"]');
   const isEditing = Boolean(scheduleIdInput && scheduleIdInput.value);
+  const editScopeField = $("editScopeField");
+  const additionalDatesField = $("additionalDatesField");
+  const dateBatchModeField = $("dateBatchModeField");
   status.textContent = isEditing ? "Editing Schedule" : "Creating New Schedule";
   status.classList.toggle("editing", isEditing);
+  if (editScopeField) {
+    editScopeField.classList.toggle("visible", isEditing);
+  }
+  if (additionalDatesField) {
+    additionalDatesField.classList.toggle("hidden", isEditing);
+  }
+  if (dateBatchModeField) {
+    dateBatchModeField.classList.toggle("hidden", isEditing);
+  }
 }
 
 function renderScheduleConflictHelper() {
@@ -1911,12 +1923,30 @@ function renderAdmin() {
     $("adminSchedules").innerHTML = `<div class="empty-state">No schedules yet. Add a bus and route first, then create a schedule.</div>`;
   } else {
     const selectedBusFilter = $("scheduleBusFilter")?.value || "all";
-    const visibleSchedules = selectedBusFilter === "all"
+    const scheduleSearchQuery = String($("scheduleSearchFilter")?.value || "").trim().toLowerCase();
+    const filteredByBus = selectedBusFilter === "all"
       ? state.db.schedules
       : state.db.schedules.filter((schedule) => schedule.busId === selectedBusFilter);
+    const visibleSchedules = scheduleSearchQuery
+      ? filteredByBus.filter((schedule) => {
+        const bus = getBus(schedule.busId);
+        const route = getRoute(schedule.routeId);
+        const searchText = [
+          bus?.plateNumber || "",
+          bus?.busType || "",
+          route?.origin || "",
+          route?.destination || "",
+          getRouteStops(route).join(" "),
+          schedule.date || "",
+          schedule.departureTime || "",
+          schedule.arrivalTime || "",
+        ].join(" ").toLowerCase();
+        return searchText.includes(scheduleSearchQuery);
+      })
+      : filteredByBus;
 
     if (!visibleSchedules.length) {
-      $("adminSchedules").innerHTML = `<div class="empty-state">No schedules found for the selected bus.</div>`;
+      $("adminSchedules").innerHTML = `<div class="empty-state">No schedules found for the selected filter.</div>`;
       renderAdminSeatMap();
       return;
     }
@@ -2422,6 +2452,7 @@ async function saveSchedule(formData, form) {
   const date = formData.get("date");
   const additionalDatesValue = formData.get("additionalDates");
   const dateBatchMode = formData.get("dateBatchMode") || "single";
+  const editScope = formData.get("editScope") || "single";
   const departureTime = formData.get("departureTime");
   const arrivalTime = formData.get("arrivalTime");
   const fare = Number(formData.get("fare") || 0);
@@ -2445,8 +2476,22 @@ async function saveSchedule(formData, form) {
     }
   });
 
-  scheduleDates.forEach((scheduleDate, index) => {
-    const recordId = isEditing ? scheduleId : uid();
+  const targetSchedules = isEditing && editScope === "busMonth"
+    ? state.db.schedules
+      .filter((schedule) => schedule.busId === busId && String(schedule.date || "").slice(0, 7) === String(date || "").slice(0, 7))
+      .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+    : null;
+
+  const scheduleTargets = targetSchedules?.length
+    ? targetSchedules.map((schedule) => ({ id: schedule.id, date: schedule.date }))
+    : scheduleDates.map((scheduleDate, index) => ({
+      id: isEditing && index === 0 ? scheduleId : uid(),
+      date: scheduleDate,
+    }));
+
+  scheduleTargets.forEach((target) => {
+    const recordId = target.id;
+    const scheduleDate = target.date;
     const existingSchedules = state.db.schedules.filter(
       (schedule) => schedule.busId === busId && schedule.date === scheduleDate && schedule.id !== recordId
     );
@@ -2459,7 +2504,7 @@ async function saveSchedule(formData, form) {
     }
 
     store.put({
-      id: isEditing && index === 0 ? scheduleId : recordId,
+      id: recordId,
       routeId,
       busId,
       date: scheduleDate,
@@ -2474,7 +2519,7 @@ async function saveSchedule(formData, form) {
   await transactionDone(transaction);
   await logAuditAction(
     isEditing ? "Schedule Updated" : "Schedule Created",
-    `${scheduleDates.join(", ")} ${departureTime}-${arrivalTime} | Fare ${formatCurrency(fare)}${Object.keys(stopFares).length ? ` | Stop fares: ${Object.keys(stopFares).length}` : ""}`
+    `${scheduleTargets.map((item) => item.date).join(", ")} ${departureTime}-${arrivalTime} | Fare ${formatCurrency(fare)}${Object.keys(stopFares).length ? ` | Stop fares: ${Object.keys(stopFares).length}` : ""}${isEditing && editScope === "busMonth" ? " | Applied to selected bus for the month" : ""}`
   );
   await finalizeMutation("save-schedule");
   if (form) {
@@ -2482,9 +2527,17 @@ async function saveSchedule(formData, form) {
     const scheduleIdInput = form.querySelector('[name="scheduleId"]');
     if (scheduleIdInput) scheduleIdInput.value = "";
   }
+  if ($("scheduleBusFilter")) $("scheduleBusFilter").value = busId || "all";
   updateScheduleFormStatus();
   renderScheduleConflictHelper();
-  showToast(isEditing ? "Schedule updated." : `Schedule added for ${scheduleDates.length} date${scheduleDates.length === 1 ? "" : "s"}.`);
+  renderAdmin();
+  showToast(
+    isEditing
+      ? (editScope === "busMonth"
+        ? `Updated ${scheduleTargets.length} schedules for this bus in the selected month.`
+        : "Schedule updated.")
+      : `Schedule added for ${scheduleDates.length} date${scheduleDates.length === 1 ? "" : "s"}.`
+  );
 }
 
 function resetScheduleForm() {
@@ -2493,8 +2546,10 @@ function resetScheduleForm() {
   form.reset();
   const scheduleIdInput = form.querySelector('[name="scheduleId"]');
   if (scheduleIdInput) scheduleIdInput.value = "";
+  if ($("scheduleBusFilter")) $("scheduleBusFilter").value = "all";
   updateScheduleFormStatus();
   renderScheduleConflictHelper();
+  renderAdmin();
   showToast("Schedule form cleared. The next save will create a new schedule.");
 }
 
@@ -2506,10 +2561,13 @@ function editSchedule(scheduleId) {
   form.querySelector('[name="routeId"]').value = schedule.routeId;
   form.querySelector('[name="busId"]').value = schedule.busId;
   form.querySelector('[name="date"]').value = schedule.date;
+  if ($("scheduleBusFilter")) $("scheduleBusFilter").value = schedule.busId || "all";
   const additionalDatesInput = form.querySelector('[name="additionalDates"]');
   if (additionalDatesInput) additionalDatesInput.value = "";
   const dateBatchModeInput = form.querySelector('[name="dateBatchMode"]');
   if (dateBatchModeInput) dateBatchModeInput.value = "single";
+  const editScopeInput = form.querySelector('[name="editScope"]');
+  if (editScopeInput) editScopeInput.value = "single";
   form.querySelector('[name="departureTime"]').value = schedule.departureTime;
   form.querySelector('[name="arrivalTime"]').value = schedule.arrivalTime;
   const fareInput = form.querySelector('[name="fare"]');
@@ -2520,6 +2578,7 @@ function editSchedule(scheduleId) {
   }
   updateScheduleFormStatus();
   renderScheduleConflictHelper();
+  renderAdmin();
   showToast("Schedule loaded for editing.");
 }
 
@@ -3052,6 +3111,9 @@ function attachEvents() {
   }
   if ($("scheduleBusFilter")) {
     $("scheduleBusFilter").addEventListener("change", renderAdmin);
+  }
+  if ($("scheduleSearchFilter")) {
+    $("scheduleSearchFilter").addEventListener("input", renderAdmin);
   }
   if ($("clearSchedulesBtn")) {
     $("clearSchedulesBtn").addEventListener("click", () => {

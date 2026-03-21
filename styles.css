@@ -1311,6 +1311,18 @@ button:disabled {
   color: #9c4221;
 }
 
+.editing-only-field {
+  display: none;
+}
+
+.editing-only-field.visible {
+  display: grid;
+}
+
+.creation-only-field.hidden {
+  display: none;
+}
+
 .empty-state {
   display: grid;
   place-items: center;
