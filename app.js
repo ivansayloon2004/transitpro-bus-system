@@ -42,7 +42,7 @@ const state = {
   activeAdminPanel: "adminOverview",
   printBookingId: null,
   lastReceipt: null,
-  pendingPassengerOtp: null,
+  pendingRegistrationOtp: null,
   serverSnapshotUpdatedAt: null,
   reportFilters: {
     start: "",
@@ -554,33 +554,33 @@ function getBookingPricing(schedule, destination, passengerCount, discountType) 
   };
 }
 
-function resetPassengerOtpFlow() {
-  state.pendingPassengerOtp = null;
-  const otpForm = $("otpLoginForm");
-  const otpStatus = $("otpLoginStatus");
+function resetRegistrationOtpFlow() {
+  state.pendingRegistrationOtp = null;
+  const otpForm = $("otpRegisterForm");
+  const otpStatus = $("otpRegisterStatus");
   if (otpForm) {
     otpForm.reset();
     otpForm.classList.add("hidden");
   }
   if (otpStatus) {
-    otpStatus.textContent = "Enter the OTP sent to your phone number.";
+    otpStatus.textContent = "Enter the OTP sent to your phone number to finish registration.";
   }
 }
 
-function setPassengerOtpFlow(payload) {
-  state.pendingPassengerOtp = {
+function setRegistrationOtpFlow(payload) {
+  state.pendingRegistrationOtp = {
+    name: payload.name,
     contact: payload.contact,
     password: payload.password,
-    user: payload.user,
     expiresAt: payload.expiresAt,
     mockOtp: payload.mockOtp,
     deliveryMode: payload.deliveryMode || "mock",
   };
-  const otpForm = $("otpLoginForm");
-  const otpStatus = $("otpLoginStatus");
+  const otpForm = $("otpRegisterForm");
+  const otpStatus = $("otpRegisterStatus");
   if (otpForm) otpForm.classList.remove("hidden");
   if (otpStatus) {
-    otpStatus.textContent = `${payload.deliveryMode === "sms" ? "SMS OTP" : "Mock OTP"} sent to ${payload.user.contact}. Expires at ${formatDisplayDateTime(payload.expiresAt)}.`;
+    otpStatus.textContent = `${payload.deliveryMode === "sms" ? "SMS OTP" : "Mock OTP"} sent to ${payload.contact}. Expires at ${formatDisplayDateTime(payload.expiresAt)}.`;
   }
 }
 
@@ -2608,37 +2608,11 @@ function printLatestTicket(bookingId = null, options = {}) {
 async function loginUser(formData) {
   const contact = String(formData.get("contact") || "").replace(/\s+/g, "");
   const password = formData.get("password");
-  const payload = await postJson("/api/auth/request-login-otp", { contact, password });
-  setPassengerOtpFlow({
-    contact,
-    password,
-    user: payload.user,
-    expiresAt: payload.expiresAt,
-    mockOtp: payload.mockOtp,
-    deliveryMode: payload.deliveryMode,
-  });
-  showToast(payload.deliveryMode === "sms" ? "OTP sent by SMS. Enter the code to continue." : `Mock OTP sent: ${payload.mockOtp}`);
-}
-
-async function verifyPassengerOtp(formData) {
-  if (!state.pendingPassengerOtp) {
-    throw new Error("Start passenger login first before entering an OTP.");
-  }
-
-  const otp = String(formData.get("otp") || "").trim();
-  if (!otp) {
-    throw new Error("OTP is required.");
-  }
-
-  const payload = await postJson("/api/auth/verify-login-otp", {
-    contact: state.pendingPassengerOtp.contact,
-    otp,
-  });
+  const payload = await postJson("/api/auth/login", { contact, password });
   await pullSnapshotFromServer(true);
   const user = payload.user;
   state.session = { id: user.id, name: user.name, role: "user" };
   saveSession();
-  resetPassengerOtpFlow();
   refreshUi();
   showToast(`Welcome back, ${user.name}.`);
   if (pageMode === "auth") {
@@ -2651,19 +2625,41 @@ async function verifyPassengerOtp(formData) {
   }
 }
 
-async function resendPassengerOtp() {
-  if (!state.pendingPassengerOtp) {
-    throw new Error("Start passenger login first before requesting another OTP.");
+async function verifyRegistrationOtp(formData, form) {
+  if (!state.pendingRegistrationOtp) {
+    throw new Error("Start passenger registration first before entering an OTP.");
   }
 
-  const payload = await postJson("/api/auth/request-login-otp", {
-    contact: state.pendingPassengerOtp.contact,
-    password: state.pendingPassengerOtp.password,
+  const otp = String(formData.get("otp") || "").trim();
+  if (!otp) {
+    throw new Error("OTP is required.");
+  }
+
+  await postJson("/api/auth/verify-register-otp", {
+    contact: state.pendingRegistrationOtp.contact,
+    otp,
   });
-  setPassengerOtpFlow({
-    contact: state.pendingPassengerOtp.contact,
-    password: state.pendingPassengerOtp.password,
-    user: payload.user,
+  await pullSnapshotFromServer(true);
+  resetRegistrationOtpFlow();
+  if (form) form.reset();
+  refreshUi();
+  showToast("Passenger account created. You can now log in.");
+}
+
+async function resendRegistrationOtp() {
+  if (!state.pendingRegistrationOtp) {
+    throw new Error("Start passenger registration first before requesting another OTP.");
+  }
+
+  const payload = await postJson("/api/auth/request-register-otp", {
+    name: state.pendingRegistrationOtp.name,
+    contact: state.pendingRegistrationOtp.contact,
+    password: state.pendingRegistrationOtp.password,
+  });
+  setRegistrationOtpFlow({
+    name: state.pendingRegistrationOtp.name,
+    contact: state.pendingRegistrationOtp.contact,
+    password: state.pendingRegistrationOtp.password,
     expiresAt: payload.expiresAt,
     mockOtp: payload.mockOtp,
     deliveryMode: payload.deliveryMode,
@@ -2673,15 +2669,20 @@ async function resendPassengerOtp() {
 
 async function registerUser(formData, form) {
   const normalizedContact = String(formData.get("contact") || "").replace(/\s+/g, "");
-  await postJson("/api/auth/register", {
+  const payload = await postJson("/api/auth/request-register-otp", {
     name: formData.get("name").trim(),
     contact: normalizedContact,
     password: formData.get("password"),
   });
-  await pullSnapshotFromServer(true);
-  refreshUi();
-  form.reset();
-  showToast("Passenger account created. You can now log in.");
+  setRegistrationOtpFlow({
+    name: formData.get("name").trim(),
+    contact: normalizedContact,
+    password: formData.get("password"),
+    expiresAt: payload.expiresAt,
+    mockOtp: payload.mockOtp,
+    deliveryMode: payload.deliveryMode,
+  });
+  showToast(payload.deliveryMode === "sms" ? "Registration OTP sent by SMS. Enter it to finish creating the account." : `Mock registration OTP: ${payload.mockOtp}`);
 }
 
 async function loginAdmin(formData) {
@@ -2708,7 +2709,7 @@ async function loginAdmin(formData) {
 
 function logout() {
   state.session = null;
-  resetPassengerOtpFlow();
+  resetRegistrationOtpFlow();
   saveSession();
   if (pageMode === "admin" || pageMode === "main") {
     window.location.href = "login";
@@ -3536,15 +3537,15 @@ function attachEvents() {
       loginUser(new FormData(event.currentTarget)).catch((error) => showToast(error.message));
     });
   }
-  if ($("otpLoginForm")) {
-    $("otpLoginForm").addEventListener("submit", (event) => {
+  if ($("otpRegisterForm")) {
+    $("otpRegisterForm").addEventListener("submit", (event) => {
       event.preventDefault();
-      verifyPassengerOtp(new FormData(event.currentTarget)).catch((error) => showToast(error.message));
+      verifyRegistrationOtp(new FormData(event.currentTarget), $("registerForm")).catch((error) => showToast(error.message));
     });
   }
-  if ($("resendOtpBtn")) {
-    $("resendOtpBtn").addEventListener("click", () => {
-      resendPassengerOtp().catch((error) => showToast(error.message));
+  if ($("resendRegisterOtpBtn")) {
+    $("resendRegisterOtpBtn").addEventListener("click", () => {
+      resendRegistrationOtp().catch((error) => showToast(error.message));
     });
   }
   if ($("registerForm")) {

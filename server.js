@@ -17,6 +17,7 @@ const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || "";
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || "";
 const TWILIO_VERIFY_SERVICE_SID = process.env.TWILIO_VERIFY_SERVICE_SID || "";
 const passengerOtpStore = new Map();
+const pendingPassengerRegistrations = new Map();
 
 const db = new DatabaseSync(DB_PATH);
 
@@ -114,6 +115,11 @@ function clearExpiredOtps() {
   for (const [contact, otpRecord] of passengerOtpStore.entries()) {
     if (otpRecord.expiresAtMs <= now) {
       passengerOtpStore.delete(contact);
+    }
+  }
+  for (const [contact, registration] of pendingPassengerRegistrations.entries()) {
+    if (registration.expiresAtMs <= now) {
+      pendingPassengerRegistrations.delete(contact);
     }
   }
 }
@@ -352,6 +358,11 @@ app.post("/api/snapshot", (req, res) => {
 });
 
 app.post("/api/auth/register", (req, res) => {
+  res.status(410).json({ error: "Passenger registration now requires OTP verification. Use /api/auth/request-register-otp first." });
+});
+
+app.post("/api/auth/request-register-otp", (req, res) => {
+  clearExpiredOtps();
   const name = String(req.body?.name || "").trim();
   const contact = normalizeContact(req.body?.contact);
   const password = String(req.body?.password || "");
@@ -367,22 +378,70 @@ app.post("/api/auth/register", (req, res) => {
     return;
   }
 
-  const passenger = {
-    id: uid(),
-    name,
-    contact,
-    password,
-    role: "user",
-    createdAt: nowIso(),
-  };
+  sendPassengerOtp(contact)
+    .then((otpPayload) => {
+      pendingPassengerRegistrations.set(contact, {
+        name,
+        contact,
+        password,
+        expiresAtMs: new Date(otpPayload.expiresAt).getTime(),
+      });
 
-  snapshot.state.passengers.push(passenger);
-  const updatedAt = writeSnapshot(snapshot.state);
-  res.json({
-    ok: true,
-    updatedAt,
-    passenger: toSafePassenger(passenger),
-  });
+      res.json({
+        ok: true,
+        expiresAt: otpPayload.expiresAt,
+        mockOtp: otpPayload.mockOtp || null,
+        deliveryMode: otpPayload.deliveryMode,
+      });
+    })
+    .catch((error) => {
+      res.status(502).json({ error: error.message || "Unable to send registration OTP right now." });
+    });
+});
+
+app.post("/api/auth/verify-register-otp", (req, res) => {
+  clearExpiredOtps();
+  const contact = normalizeContact(req.body?.contact);
+  const otp = String(req.body?.otp || "").trim();
+  const pendingRegistration = pendingPassengerRegistrations.get(contact);
+
+  if (!pendingRegistration) {
+    res.status(410).json({ error: "Registration OTP expired or not requested yet." });
+    return;
+  }
+
+  verifyPassengerOtp(contact, otp)
+    .then(() => {
+      const snapshot = readSnapshot();
+      if (snapshot.state.passengers.some((passenger) => normalizeContact(passenger.contact) === contact)) {
+        pendingPassengerRegistrations.delete(contact);
+        res.status(409).json({ error: "That contact number is already registered." });
+        return;
+      }
+
+      const passenger = {
+        id: uid(),
+        name: pendingRegistration.name,
+        contact: pendingRegistration.contact,
+        password: pendingRegistration.password,
+        role: "user",
+        createdAt: nowIso(),
+      };
+
+      snapshot.state.passengers.push(passenger);
+      pendingPassengerRegistrations.delete(contact);
+      const updatedAt = writeSnapshot(snapshot.state);
+      res.json({
+        ok: true,
+        updatedAt,
+        passenger: toSafePassenger(passenger),
+      });
+    })
+    .catch((error) => {
+      const message = error.message || "OTP verification failed.";
+      const status = message.includes("expired") ? 410 : 401;
+      res.status(status).json({ error: message });
+    });
 });
 
 app.post("/api/auth/request-login-otp", (req, res) => {

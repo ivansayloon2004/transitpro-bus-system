@@ -31,7 +31,7 @@
         <div class="hero-copy">
           <p class="eyebrow">Passenger Registration</p>
           <h2>Create a passenger account in a dedicated page.</h2>
-          <p>Registration happens here so the main system windows stay clean and focused.</p>
+          <p>Registration happens here so the main system windows stay clean and focused, with OTP verification before the account is created.</p>
           <div class="hero-stats" id="heroStats"></div>
         </div>
         <div class="hero-ticket" id="ticketPreviewCard"></div>
@@ -60,6 +60,18 @@
               <input name="password" type="password" placeholder="Create password" required />
             </label>
             <button type="submit">Create Passenger Account</button>
+          </form>
+          <form id="otpRegisterForm" class="stacked-form hidden">
+            <h4>Verify Registration OTP</h4>
+            <div class="form-status" id="otpRegisterStatus">Enter the OTP sent to your phone number to finish registration.</div>
+            <label>
+              One-Time Password
+              <input name="otp" inputmode="numeric" maxlength="6" placeholder="Enter 6-digit OTP" required />
+            </label>
+            <div class="action-row">
+              <button type="submit">Confirm Registration</button>
+              <button type="button" class="secondary-button" id="resendRegisterOtpBtn">Resend OTP</button>
+            </div>
           </form>
         </section>
 
