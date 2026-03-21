@@ -11,6 +11,7 @@ const DB_PATH = path.join(__dirname, "transitpro-shared.db");
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || "";
 const BACKUP_DIR = path.join(__dirname, "backups");
 const BACKUP_RETENTION_DAYS = Number(process.env.BACKUP_RETENTION_DAYS || 30);
+const APP_TIMEZONE = process.env.APP_TIMEZONE || "Asia/Singapore";
 
 const db = new DatabaseSync(DB_PATH);
 
@@ -32,6 +33,16 @@ function uid() {
 
 function dateTag(date = new Date()) {
   return date.toISOString().slice(0, 10);
+}
+
+function currentBusinessDate() {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return formatter.format(new Date());
 }
 
 function defaultState() {
@@ -129,6 +140,24 @@ function getFilteredBookings(snapshotState, filters = {}) {
   });
 }
 
+function cleanupExpiredSchedules(reason = "automatic-cleanup") {
+  const snapshot = readSnapshot();
+  const today = currentBusinessDate();
+  const expiredScheduleIds = snapshot.state.schedules
+    .filter((schedule) => String(schedule.date || "") < today)
+    .map((schedule) => schedule.id);
+
+  if (!expiredScheduleIds.length) {
+    return 0;
+  }
+
+  snapshot.state.schedules = snapshot.state.schedules.filter((schedule) => !expiredScheduleIds.includes(schedule.id));
+  snapshot.state.seatStates = snapshot.state.seatStates.filter((seatState) => !expiredScheduleIds.includes(seatState.scheduleId));
+  writeSnapshot(snapshot.state);
+  console.log(`TransitPro removed ${expiredScheduleIds.length} expired schedules (${reason}) using timezone ${APP_TIMEZONE}`);
+  return expiredScheduleIds.length;
+}
+
 function ensureBackupDirectory() {
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
 }
@@ -174,6 +203,7 @@ function createDailyBackup(reason = "scheduled") {
 }
 
 function startAutomaticBackups() {
+  cleanupExpiredSchedules("startup");
   const createdOnStartup = createDailyBackup("startup");
   console.log(createdOnStartup
     ? `TransitPro daily backup created in ${BACKUP_DIR}`
@@ -181,6 +211,7 @@ function startAutomaticBackups() {
 
   setInterval(() => {
     try {
+      cleanupExpiredSchedules("hourly-maintenance");
       const created = createDailyBackup("daily-check");
       if (created) {
         console.log(`TransitPro daily backup created in ${BACKUP_DIR}`);
