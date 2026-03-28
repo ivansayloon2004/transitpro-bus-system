@@ -2397,9 +2397,23 @@ function renderAdmin() {
     buildResourceSection("Routes", routeCards, "No routes yet."),
   ];
 
-  $("adminResources").innerHTML = resourceMarkup.length
-    ? resourceMarkup.join("")
-    : `<div class="empty-state">No buses or routes yet. Add your first records here.</div>`;
+  if ($("adminResources")) {
+    $("adminResources").innerHTML = resourceMarkup.length
+      ? resourceMarkup.join("")
+      : `<div class="empty-state">No buses or routes yet. Add your first records here.</div>`;
+  }
+  if ($("adminBusesList")) {
+    $("adminBusesList").className = busCards.length ? "admin-list" : "admin-list empty-state";
+    $("adminBusesList").innerHTML = busCards.length
+      ? busCards.join("")
+      : "No buses yet.";
+  }
+  if ($("adminRoutesList")) {
+    $("adminRoutesList").className = routeCards.length ? "admin-list" : "admin-list empty-state";
+    $("adminRoutesList").innerHTML = routeCards.length
+      ? routeCards.join("")
+      : "No routes yet.";
+  }
 
   if ($("adminPassengersList")) {
     $("adminPassengersList").className = passengerCards.length ? "admin-list" : "admin-list empty-state";
@@ -3883,6 +3897,22 @@ function attachEvents() {
 
       if (editBusTrigger) editBus(editBusTrigger.dataset.editBus);
       if (deleteBusTrigger) deleteBus(deleteBusTrigger.dataset.deleteBus).catch((error) => showToast(error.message));
+      if (editRouteTrigger) editRoute(editRouteTrigger.dataset.editRoute);
+      if (deleteRouteTrigger) deleteRoute(deleteRouteTrigger.dataset.deleteRoute).catch((error) => showToast(error.message));
+    });
+  }
+  if ($("adminBusesList")) {
+    $("adminBusesList").addEventListener("click", (event) => {
+      const editBusTrigger = event.target.closest("[data-edit-bus]");
+      const deleteBusTrigger = event.target.closest("[data-delete-bus]");
+      if (editBusTrigger) editBus(editBusTrigger.dataset.editBus);
+      if (deleteBusTrigger) deleteBus(deleteBusTrigger.dataset.deleteBus).catch((error) => showToast(error.message));
+    });
+  }
+  if ($("adminRoutesList")) {
+    $("adminRoutesList").addEventListener("click", (event) => {
+      const editRouteTrigger = event.target.closest("[data-edit-route]");
+      const deleteRouteTrigger = event.target.closest("[data-delete-route]");
       if (editRouteTrigger) editRoute(editRouteTrigger.dataset.editRoute);
       if (deleteRouteTrigger) deleteRoute(deleteRouteTrigger.dataset.deleteRoute).catch((error) => showToast(error.message));
     });

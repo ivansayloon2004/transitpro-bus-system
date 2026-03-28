@@ -43,10 +43,11 @@
         <button class="nav-link admin-panel-link active" data-admin-panel="adminOverview" type="button">Overview</button>
         <button class="nav-link admin-panel-link" data-admin-panel="adminSchedulesPanel" type="button">Schedules</button>
         <button class="nav-link admin-panel-link" data-admin-panel="adminPassengersPanel" type="button">Passengers</button>
+        <button class="nav-link admin-panel-link" data-admin-panel="adminBusesPanel" type="button">Buses</button>
+        <button class="nav-link admin-panel-link" data-admin-panel="adminRoutesPanel" type="button">Routes</button>
         <button class="nav-link admin-panel-link" data-admin-panel="adminStaffPanel" type="button">Staff</button>
         <button class="nav-link admin-panel-link" data-admin-panel="adminTemplatesPanel" type="button">Templates</button>
         <button class="nav-link admin-panel-link" data-admin-panel="adminSeatsPanel" type="button">Seats</button>
-        <button class="nav-link admin-panel-link" data-admin-panel="adminResourcesPanel" type="button">Buses & Routes</button>
         <button class="nav-link admin-panel-link" data-admin-panel="adminManifestPanel" type="button">Manifest</button>
         <button class="nav-link admin-panel-link" data-admin-panel="adminLookupPanel" type="button">Lookup</button>
         <button class="nav-link admin-panel-link" data-admin-panel="adminBookingsPanel" type="button">Bookings</button>
@@ -228,11 +229,11 @@
                 <div class="seat-summary" id="adminSeatSummary"></div>
               </div>
 
-              <div class="panel ops-panel" id="adminResourcesPanel">
+              <div class="panel ops-panel" id="adminBusesPanel">
                 <div class="panel-heading">
                   <div>
-                    <p class="eyebrow">Fleet and Routes</p>
-                    <h3>Manage Buses and Routes</h3>
+                    <p class="eyebrow">Fleet Management</p>
+                    <h3>Manage Buses</h3>
                   </div>
                 </div>
                 <form id="busForm" class="booking-form compact-form">
@@ -259,7 +260,18 @@
                   </label>
                   <button type="submit">Save Bus</button>
                 </form>
+                <div id="adminBusesList" class="admin-list empty-state">
+                  No buses yet.
+                </div>
+              </div>
 
+              <div class="panel ops-panel" id="adminRoutesPanel">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Route Management</p>
+                    <h3>Manage Routes</h3>
+                  </div>
+                </div>
                 <form id="routeForm" class="booking-form compact-form">
                   <input type="hidden" name="routeId" />
                   <label>
@@ -288,7 +300,9 @@
                   </label>
                   <button type="submit">Save Route</button>
                 </form>
-                <div id="adminResources" class="admin-list"></div>
+                <div id="adminRoutesList" class="admin-list empty-state">
+                  No routes yet.
+                </div>
               </div>
 
               <div class="panel ops-panel" id="adminStaffPanel">

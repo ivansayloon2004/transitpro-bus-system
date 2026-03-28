@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: transitpro-bus-system
+    name: transitpro-bus-system-2
     env: node
     plan: free
     buildCommand: npm install
